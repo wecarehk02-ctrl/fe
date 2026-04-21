@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 防止 iOS 點擊輸入框或按鈕時出現預設的高亮背景及放大行為 */
+input, textarea, button, select, a {
+  -webkit-tap-highlight-color: transparent;
+}
