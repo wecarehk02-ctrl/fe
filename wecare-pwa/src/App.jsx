@@ -3,7 +3,7 @@ import {
   Phone, Check, ShoppingBag, User, CalendarDays, 
   MapPin, Trash2, ChevronRight, ArrowLeft, Receipt, 
   BookOpen, Activity, Leaf, Flame, Snowflake, Wind, 
-  ShieldAlert, CheckSquare, Sparkles, Layers, Info, Soup, HeartPulse, Stethoscope, Lock, Edit3, X
+  ShieldAlert, CheckSquare, Sparkles, Layers, Info, Soup, Apple, HeartPulse, Stethoscope, Lock, Edit3, X
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore';
@@ -37,7 +37,7 @@ const getLocalDateFormat = (date) => {
 const isUnavailableDate = (date) => { if (date.getDay() === 0) return true; return HK_HOLIDAYS.includes(getLocalDateFormat(date)); };
 const getMinDate = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d; };
 
-// 🌟 修正：確保一定顯示未來 30 個「有效送餐日」
+// 🌟 修正：確保必定產生 30 個有效日子
 const generateUpcomingDates = () => {
   const dates = []; 
   let current = getMinDate();
@@ -74,6 +74,7 @@ export default function App() {
   const [testResult, setTestResult] = useState(null); 
   
   const [orderHistory, setOrderHistory] = useState([]);
+  const [expandedBlog, setExpandedBlog] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
   
   const [menusData, setMenusData] = useState({});
@@ -85,7 +86,7 @@ export default function App() {
   const initialDateStr = upcomingDates.length > 0 ? getLocalDateFormat(upcomingDates[0]) : '';
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedDates, setSelectedDates] = useState([initialDateStr]);
-  const [dailyForm, setDailyForm] = useState({ meals: {}, soupQty: 0 }); // 🌟 已移除 fruitQty
+  const [dailyForm, setDailyForm] = useState({ meals: {}, soupQty: 0 }); // 冇 fruitQty
   const [editingMeal, setEditingMeal] = useState(null);
   const [selectingSpecial, setSelectingSpecial] = useState(null); 
   const [specForm, setSpecForm] = useState({ texture: '', rice: '正飯' }); 
@@ -116,7 +117,7 @@ export default function App() {
       const dateStr = selectedDates[0];
       const cartItem = cart[dateStr];
       if (cartItem && !cartItem.isSpecial) setDailyForm(JSON.parse(JSON.stringify(cartItem)));
-      else setDailyForm({ meals: {}, soupQty: 0 }); // 🌟 已移除 fruitQty
+      else setDailyForm({ meals: {}, soupQty: 0 }); 
       setEditingMeal(null);
     }
   }, [selectedDates, cart, isBulkMode, mealType]);
@@ -156,7 +157,7 @@ export default function App() {
     if (!specForm.texture) return showToast("請選擇質感");
     const dStr = selectedDates[0];
     if (!dStr) return;
-    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: specForm.texture, rice: specForm.rice, soupQty: 0, meals: {} } }));
+    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: specForm.texture, rice: specForm.rice, soupQty: 0, fruitQty: 0, meals: {} } }));
     showToast(`✅ 已將 ${selectingSpecial.meal.name} 加入購物車`);
     setSelectingSpecial(null); setSpecForm({ texture: '', rice: '正飯' }); setActiveTab('cart');
   };
@@ -380,7 +381,6 @@ export default function App() {
               <section>
                 <h3 className="text-lg font-medium text-[#3F2B1D] mb-4">2. 附加項目 <span className="text-sm text-[#9CA3AF] ml-2">自由選擇</span></h3>
                 
-                {/* 🌟 只有例湯，無生果 */}
                 <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm mb-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3 text-[#3F2B1D]">
@@ -453,7 +453,7 @@ export default function App() {
                         ) : (
                           <>
                             {Object.entries(item.meals).map(([m, data]) => (<div key={m} className="font-medium text-lg text-[#3F2B1D] mb-1.5">{m}餐 <span className="text-sm font-normal text-[#7A6455] border border-[#E5E5E5] rounded-lg px-2 py-0.5 ml-2 bg-[#F9FAF8] align-middle">{data.texture ? `${data.texture} + ${data.rice}` : '未選齊'}</span></div>))}
-                            <div className="text-sm text-[#7A6455] mt-3">{item.soupQty > 0 ? <span className="mr-4">🍲 例湯</span> : null}{Object.keys(item.meals).length === 0 && item.soupQty === 0 && '無附加項目'}</div>
+                            <div className="text-sm text-[#7A6455] mt-3">{item.soupQty > 0 ? <span className="mr-4">🍲 例湯 x{item.soupQty}</span> : null}{Object.keys(item.meals).length === 0 && item.soupQty === 0 && '無附加項目'}</div>
                           </>
                         )}
                       </div>
@@ -513,9 +513,95 @@ export default function App() {
     );
   };
 
-  const renderBlog = () => { /* ...保持原樣... */ return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
-  const renderTest = () => { /* ...保持原樣... */ return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2></div><div className="p-5">系統自測建置中</div></div>; };
-  const renderProfile = () => { /* ...保持原樣... */ return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">我的紀錄</h2></div><div className="p-5">{orderHistory.length === 0 ? "未有紀錄" : orderHistory.map(o => <div key={o.id} className="bg-white p-4 mb-3 rounded-xl border">{o.date} 訂單處理中</div>)}</div></div>; };
+  const renderBlog = () => { return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
+  
+  // 🌟 完整還原：單頁體質問卷
+  const renderTest = () => {
+    if (testResult) {
+      const info = CONSTITUTIONS[testResult]; const Icon = info.icon;
+      return ( <div className="min-h-screen bg-[#FDFBF7] p-5 pt-10 font-sans animate-in fade-in pb-24"><div className="text-center mb-8"><div className="text-sm tracking-widest text-[#9CA3AF] mb-3">分析結果</div><div className={`w-24 h-24 mx-auto rounded-full ${info.bg} ${info.color} flex items-center justify-center mb-5 shadow-sm`}><Icon size={40} strokeWidth={1.5}/></div><h2 className={`text-3xl font-semibold ${info.color} mb-3`}>{info.name}</h2><span className="text-sm bg-white border border-[#E5E5E5] px-4 py-1.5 rounded-full text-[#7A6455] shadow-sm">特徵：{info.tag}</span></div><div className="bg-white rounded-2xl p-6 border border-[#E5E5E5] mb-8 shadow-sm"><div className="flex items-center gap-2.5 mb-3 text-[#3F2B1D]"><CheckSquare size={20} className="text-[#D97706]"/> <span className="font-medium text-lg">系統已記錄您的體質</span></div><p className="text-base text-[#7A6455] leading-relaxed">往後在點餐時，系統會自動在適合您的菜式旁顯示推薦標籤，助您輕鬆選擇養生膳食。</p></div><button onClick={() => setActiveTab('home')} className="w-full bg-[#D97706] text-white font-medium text-lg py-4 rounded-2xl shadow-md mb-4">立即前往選餐</button><button onClick={() => { setTestResult(null); setTestAnswers({}); setTestStep(0); }} className="w-full text-[#9CA3AF] text-base py-3">重新測試</button></div> );
+    }
+    const currentQ = TEST_QUESTIONS[testStep]; const progress = Math.round(((testStep + 1) / TEST_QUESTIONS.length) * 100);
+    const handleAnswer = (score) => {
+      setTestAnswers(prev => ({...prev, [currentQ.id]: score}));
+      if (testStep < TEST_QUESTIONS.length - 1) setTimeout(() => setTestStep(s => s + 1), 250); 
+      else {
+        const a = {...testAnswers, [currentQ.id]: score}; const scores = { B: a[1]||0, C: a[2]||0, D: ((a[3]||0)+(a[4]||0))/2, E: a[5]||0, F: a[6]||0, G: ((a[7]||0)+(a[8]||0))/2, H: a[9]||0, I: ((a[10]||0)+(a[11]||0))/2 };
+        let maxScore = 0; let res = 'A'; Object.keys(scores).forEach(k => { if(scores[k] > maxScore) { maxScore = scores[k]; res = k; } });
+        const healthScore = ((a[12]||0)+(a[13]||0)+(a[14]||0)+(a[15]||0))/4; if (maxScore < 3 && healthScore >= 3) res = 'A'; setTestResult(res); 
+      }
+    };
+    return ( <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div><div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}><div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div><div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div></div></div> );
+  };
+
+  const renderProfile = () => {
+    return (
+      <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in relative">
+        {showPwdChange && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-end sm:items-center">
+             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
+                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D] flex items-center gap-2"><Lock size={20}/> 更改密碼</h3><button onClick={() => setShowPwdChange(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
+                <div className="space-y-4 mb-8"><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">舊密碼</label><input type="password" value={pwdForm.old} onChange={e=>setPwdForm(p=>({...p, old: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">新密碼</label><input type="password" value={pwdForm.new} onChange={e=>setPwdForm(p=>({...p, new: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">確認新密碼</label><input type="password" value={pwdForm.confirm} onChange={e=>setPwdForm(p=>({...p, confirm: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div></div>
+                <button onClick={handleChangePassword} className="w-full py-4 bg-[#3F2B1D] text-white rounded-xl font-medium text-lg active:scale-95 transition-all">確認更改</button>
+             </div>
+          </div>
+        )}
+        
+        {showProfileEdit && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-end sm:items-center">
+             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D] flex items-center gap-2"><Edit3 size={20}/> 修改個人資料</h3><button onClick={() => setShowProfileEdit(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
+                <div className="space-y-4 mb-8">
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">客戶名稱 (長者/用膳者)</label><input type="text" value={profileForm.name || ''} onChange={e=>setProfileForm(p=>({...p, name: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">聯絡人名稱 (例如: 子女)</label><input type="text" value={profileForm.contactName || ''} onChange={e=>setProfileForm(p=>({...p, contactName: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">手提電話 (登入用)</label><input type="tel" value={profileForm.phone || ''} disabled className="w-full bg-gray-100 border border-[#E5E5E5] px-4 py-3 rounded-xl text-gray-500" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">送餐地址</label><textarea value={profileForm.address || ''} onChange={e=>setProfileForm(p=>({...p, address: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706] min-h-[100px] resize-none"></textarea></div>
+                </div>
+                <button onClick={handleSaveProfile} className="w-full py-4 bg-[#D97706] text-white rounded-xl font-medium text-lg active:scale-95 transition-all">儲存資料</button>
+             </div>
+          </div>
+        )}
+
+        <div className="bg-white px-5 py-8 border-b border-[#E5E5E5] shadow-sm">
+          {customerInfo ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-5"><div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div><div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div></div>
+              <button onClick={() => setShowProfileEdit(true)} className="p-2 bg-gray-50 text-[#D97706] rounded-full"><Edit3 size={20}/></button>
+            </div>
+          ) : (
+            <div><h2 className="text-2xl font-semibold text-[#3F2B1D] mb-2">我的帳戶</h2><p className="text-base text-[#7A6455] mb-6">登入後可以查看訂單及資料</p><button onClick={() => { setActiveTab('cart'); setCheckoutStep('login'); }} className="w-full py-3.5 bg-[#3F2B1D] text-white text-lg font-medium rounded-xl">立即登入</button></div>
+          )}
+        </div>
+        
+        {customerInfo && (
+          <div className="p-5">
+            <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4 mt-2">⚙️ 帳戶設定</h3>
+            <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden">
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-[#FAFAF9]"><div><div className="text-xs text-[#9CA3AF] mb-1">聯絡人名稱</div><div className="text-sm font-medium text-[#3F2B1D]">{customerInfo.contactName || '未提供'}</div></div></div>
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center"><div><div className="text-xs text-[#9CA3AF] mb-1">送餐地址</div><div className="text-sm text-[#7A6455]">{customerInfo.address || '未填寫'}</div></div></div>
+               <button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left"><span className="text-sm font-medium text-[#3F2B1D]">修改登入密碼</span><ChevronRight size={18} className="text-gray-400"/></button>
+            </div>
+
+            <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4">📝 您的近期紀錄</h3>
+            {orderHistory.length === 0 ? <div className="bg-white p-8 rounded-2xl border border-[#E5E5E5] text-center shadow-sm"><p className="text-lg text-[#9CA3AF]">暫時未有任何紀錄</p></div> : (
+              <div className="space-y-4">
+                {orderHistory.map(o => (
+                  <div key={o.id} className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm">
+                    <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]"><span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span><span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span></div>
+                    <div className="text-base text-[#7A6455] space-y-2">
+                      {Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' + ')})</span></div>)}
+                      {o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setCustomerInfo(null); setOrderHistory([]); }} className="w-full mt-8 py-3.5 bg-white text-[#EF4444] text-lg font-medium border border-[#FECACA] rounded-xl hover:bg-[#FEF2F2] transition-colors">登出帳戶</button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const cartItemCount = Object.keys(cart).length;
 
