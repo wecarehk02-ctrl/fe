@@ -8,9 +8,6 @@ import {
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc } from 'firebase/firestore';
 
-// ==========================================
-// 🚀 Firebase 設定
-// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBs-iuaxif5Ruol0o95bvPHG7sAeBPIZCI",
   authDomain: "wecare-db-257a2.firebaseapp.com",
@@ -21,19 +18,11 @@ const firebaseConfig = {
 };
 
 let db;
-try {
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-} catch (e) {
-  console.error("Firebase 初始化失敗", e);
-}
+try { app = initializeApp(firebaseConfig); db = getFirestore(app); } catch (e) { console.error("Firebase 初始化失敗", e); }
 
-// ==========================================
-// ⚙️ 系統常數 & 日期工具
-// ==========================================
 const TEXTURES = ['正', '碎', '免治', '分糊', '全糊'];
 const MEALS = ['A', 'B', 'C'];
-const WHATSAPP_NUM = "85246084299"; // 🆕 更新聯絡號碼
+const WHATSAPP_NUM = "85246084299"; 
 
 const HK_HOLIDAYS = [
   '2026-01-01', '2026-02-17', '2026-02-18', '2026-02-19', '2026-04-03', 
@@ -42,10 +31,17 @@ const HK_HOLIDAYS = [
   '2026-12-25', '2026-12-26'
 ];
 
-const formatDate = (date) => date.toISOString().split('T')[0];
+// 🌟 修正時區 Bug：強制使用本地時區格式化日期
+const getLocalDateFormat = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const isUnavailableDate = (date) => {
   if (date.getDay() === 0) return true; 
-  return HK_HOLIDAYS.includes(formatDate(date)); 
+  return HK_HOLIDAYS.includes(getLocalDateFormat(date)); 
 };
 
 const getMinDate = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d; };
@@ -71,7 +67,6 @@ const SPECIAL_MEALS = [
   { id: 'low_residue', name: '低渣餐', desc: '減少腸道消化負擔，適合腸胃手術前後或腸道極度敏感人士。', icon: <Stethoscope size={24} className="text-orange-500"/> }
 ];
 
-// 🆕 完整還原 15 題體質測試
 const CONSTITUTIONS = {
   A: { id: 'A', name: "平和質", tag: "健康寶寶", color: "text-emerald-700", bg: "bg-emerald-50", icon: Leaf },
   B: { id: 'B', name: "氣虛質", tag: "容易疲倦", color: "text-stone-600", bg: "bg-stone-100", icon: Activity },
@@ -102,16 +97,12 @@ const TEST_QUESTIONS = [
   { id: 15, text: "【健康指標】大小便規律，且狀態正常？", isReverse: true }
 ];
 
-// ==========================================
-// 📱 主程式
-// ==========================================
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [checkoutStep, setCheckoutStep] = useState('cart'); 
   const [customerInfo, setCustomerInfo] = useState(null);
   
-  // 體質測試狀態
-  const [testStep, setTestStep] = useState(0); // 🆕 問卷進度控制
+  const [testStep, setTestStep] = useState(0); 
   const [testAnswers, setTestAnswers] = useState({});
   const [testResult, setTestResult] = useState(null); 
   
@@ -119,34 +110,30 @@ export default function App() {
   const [expandedBlog, setExpandedBlog] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
   
-  // 🆕 已清空所有 Testing Data
   const [menusData, setMenusData] = useState({});
   const [blogsData, setBlogsData] = useState([]);
 
-  // 點餐狀態
   const [mealType, setMealType] = useState('daily'); 
   const [cart, setCart] = useState({});
   const upcomingDates = useMemo(() => generateUpcomingDates(), []);
-  const initialDateStr = upcomingDates.length > 0 ? formatDate(upcomingDates[0]) : '';
+  const initialDateStr = upcomingDates.length > 0 ? getLocalDateFormat(upcomingDates[0]) : '';
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedDates, setSelectedDates] = useState([initialDateStr]);
   const [dailyForm, setDailyForm] = useState({ meals: {}, soupQty: 0, fruitQty: 0 });
   const [editingMeal, setEditingMeal] = useState(null);
-  const [selectingSpecial, setSelectingSpecial] = useState(null); // 🆕 處理特別餐質感選擇
+  const [selectingSpecial, setSelectingSpecial] = useState(null); 
 
-  // 結帳狀態
   const [loginPhone, setLoginPhone] = useState('');
   const [tempAddress, setTempAddress] = useState('');
   const [referralCode, setReferralCode] = useState('');
   
-  // Profile 密碼修改狀態
   const [pwdForm, setPwdForm] = useState({ old: '', new: '', confirm: '' });
   const [showPwdChange, setShowPwdChange] = useState(false);
 
   useEffect(() => {
     const fetchFirebaseData = async () => {
       try {
-        if (!db) throw new Error("DB未初始化");
+        if (!db) return;
         const menusSnap = await getDocs(collection(db, 'menus'));
         const mObj = {}; menusSnap.forEach(d => { mObj[d.id] = d.data(); });
         const blogsSnap = await getDocs(collection(db, 'blogs'));
@@ -154,9 +141,7 @@ export default function App() {
 
         setMenusData(mObj); 
         setBlogsData(bArr);
-      } catch (error) {
-        console.error("讀取Firebase失敗");
-      }
+      } catch (error) {}
     };
     fetchFirebaseData();
   }, []);
@@ -174,66 +159,46 @@ export default function App() {
     }
   }, [selectedDates, cart, isBulkMode, mealType]);
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 2500);
-  };
+  const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 2500); };
 
   const handleDateSelect = (dateObj) => {
-    const dStr = formatDate(dateObj);
+    const dStr = getLocalDateFormat(dateObj);
     if (isBulkMode && mealType === 'daily') {
       setSelectedDates(prev => prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort());
-    } else {
-      setSelectedDates([dStr]);
-    }
+    } else { setSelectedDates([dStr]); }
   };
 
   const handleAddToCart = () => {
     if (!selectedDates[0]) return;
-    if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) {
-      return showToast("請最少選擇一款餐點或附加項目");
-    }
+    if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) return showToast("請最少選擇一款餐點或附加項目");
     for (const [meal, texture] of Object.entries(dailyForm.meals)) {
       if (texture === true) return showToast(`請為 ${meal}餐 選擇質感`);
     }
 
     const newCart = { ...cart };
-    selectedDates.forEach(dStr => { 
-      newCart[dStr] = { ...JSON.parse(JSON.stringify(dailyForm)), isSpecial: false }; 
-    });
+    selectedDates.forEach(dStr => { newCart[dStr] = { ...JSON.parse(JSON.stringify(dailyForm)), isSpecial: false }; });
     setCart(newCart);
     
     if (!isBulkMode && selectedDates.length === 1) {
-      const currentIndex = upcomingDates.findIndex(d => formatDate(d) === selectedDates[0]);
+      const currentIndex = upcomingDates.findIndex(d => getLocalDateFormat(d) === selectedDates[0]);
       if (currentIndex >= 0 && currentIndex < upcomingDates.length - 1) {
-        setSelectedDates([formatDate(upcomingDates[currentIndex + 1])]);
+        setSelectedDates([getLocalDateFormat(upcomingDates[currentIndex + 1])]);
       }
       showToast("✅ 日常餐已儲存至購物車");
     } else if (isBulkMode) {
       showToast(`✅ 已成功套用至 ${selectedDates.length} 個日子`);
-      setIsBulkMode(false);
-      setSelectedDates([selectedDates[selectedDates.length - 1]]); 
+      setIsBulkMode(false); setSelectedDates([selectedDates[selectedDates.length - 1]]); 
     }
   };
 
-  // 🆕 特別餐處理邏輯：先彈出選擇質感，再加入購物車
   const confirmSpecialMeal = (texture) => {
     const dStr = selectedDates[0];
     if (!dStr) return;
-
     setCart(prev => ({
-      ...prev,
-      [dStr]: { 
-        isSpecial: true, 
-        specialName: selectingSpecial.meal.name, 
-        duration: selectingSpecial.duration,
-        texture: texture, // 記錄埋質感
-        soupQty: 0, fruitQty: 0, meals: {} 
-      }
+      ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: texture, soupQty: 0, fruitQty: 0, meals: {} }
     }));
     showToast(`✅ 已將 ${selectingSpecial.meal.name} (${texture}) 加入購物車`);
-    setSelectingSpecial(null);
-    setActiveTab('cart');
+    setSelectingSpecial(null); setActiveTab('cart');
   };
   
   const proceedToCheckout = () => {
@@ -252,71 +217,42 @@ export default function App() {
 
   const submitFinalOrder = async () => {
     if (!customerInfo || !customerInfo.id) return showToast("請先登入及填寫送餐資料");
-
     try {
       const newOrders = [];
-      
       for (const [dateStr, details] of Object.entries(cart)) {
         const counts = {};
-        
-        if (details.isSpecial) {
-          // 🆕 格式變成：特別餐_低嘌呤餐(7日)_碎
-          counts[`特別餐_${details.specialName}(${details.duration}日)_${details.texture}`] = 1;
-        } else {
-          Object.entries(details.meals).forEach(([mealCode, texture]) => { 
-            counts[`${mealCode}_${texture}`] = 1; 
-          });
-        }
+        if (details.isSpecial) counts[`特別餐_${details.specialName}(${details.duration}日)_${details.texture}`] = 1;
+        else Object.entries(details.meals).forEach(([mealCode, texture]) => { counts[`${mealCode}_${texture}`] = 1; });
 
         const orderData = {
-          date: dateStr, 
-          customerId: customerInfo.id, 
-          counts: counts, 
-          soupQty: details.soupQty || 0, 
-          fruitQty: details.fruitQty || 0,
-          referralCode: referralCode.trim(), 
-          status: '處理中',
-          timestamp: new Date().toISOString()
+          date: dateStr, customerId: customerInfo.id, counts: counts, soupQty: details.soupQty || 0, 
+          fruitQty: details.fruitQty || 0, referralCode: referralCode.trim(), status: '處理中', timestamp: new Date().toISOString()
         };
-
         const orderId = `${dateStr}_${customerInfo.id}`;
         await setDoc(doc(db, 'orders', orderId), orderData, { merge: true });
         newOrders.push({ id: orderId, ...orderData });
       }
-
       setOrderHistory(prev => [...newOrders, ...prev]); 
-      setCart({}); 
-      setReferralCode('');
-      setCheckoutStep('success');
-    } catch (error) {
-      showToast("提交訂單失敗，請檢查網絡");
-    }
+      setCart({}); setReferralCode(''); setCheckoutStep('success');
+    } catch (error) { showToast("提交訂單失敗，請檢查網絡"); }
   };
 
   const handleChangePassword = () => {
     if (pwdForm.new !== pwdForm.confirm) return showToast("兩次輸入的新密碼不一致");
     if (pwdForm.new.length < 6) return showToast("密碼長度最少需要6位");
-    // 模擬成功更改
     showToast("✅ 密碼已成功更新");
-    setPwdForm({ old: '', new: '', confirm: '' });
-    setShowPwdChange(false);
+    setPwdForm({ old: '', new: '', confirm: '' }); setShowPwdChange(false);
   };
 
   const Toast = () => {
     if (!toastMsg) return null;
     return (
       <div className="fixed top-1/3 left-1/2 transform -translate-x-1/2 z-[100] animate-in zoom-in-95 duration-200">
-        <div className="bg-[#3F2B1D] text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 w-max">
-          <Info size={24} className="text-[#D97706] shrink-0"/>
-          <span className="text-lg font-medium tracking-wide">{toastMsg}</span>
-        </div>
+        <div className="bg-[#3F2B1D] text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 w-max"><Info size={24} className="text-[#D97706] shrink-0"/><span className="text-lg font-medium tracking-wide">{toastMsg}</span></div>
       </div>
     );
   };
 
-  // ==========================================
-  // UI: 點餐首頁
-  // ==========================================
   const renderHome = () => {
     if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 14 天沒有可送餐日子</div>;
 
@@ -328,34 +264,18 @@ export default function App() {
       if (dailyForm.meals[meal]) {
         const newMeals = { ...dailyForm.meals }; delete newMeals[meal]; setDailyForm({ ...dailyForm, meals: newMeals });
         if (editingMeal === meal) setEditingMeal(null);
-      } else { 
-        setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: true } }); 
-        setEditingMeal(meal);
-      }
+      } else { setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: true } }); setEditingMeal(meal); }
     };
-
-    const setTextureForMeal = (meal, texture) => { 
-      setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: texture } }); 
-      setEditingMeal(null);
-    };
+    const setTextureForMeal = (meal, texture) => { setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: texture } }); setEditingMeal(null); };
 
     return (
       <div className="pb-32 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-500 relative">
-        
-        {/* 🆕 特別餐選擇質感 Modal */}
         {selectingSpecial && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center sm:items-center">
             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
-               <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xl font-bold text-[#3F2B1D]">請選擇「{selectingSpecial.meal.name}」質感</h3>
-                 <button onClick={() => setSelectingSpecial(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button>
-               </div>
+               <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D]">請選擇「{selectingSpecial.meal.name}」質感</h3><button onClick={() => setSelectingSpecial(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
                <div className="grid grid-cols-2 gap-3 mb-6">
-                  {TEXTURES.map(t => (
-                    <button key={t} onClick={() => confirmSpecialMeal(t)} className="py-4 border-2 border-[#E5E5E5] rounded-xl font-medium text-[#3F2B1D] hover:border-[#D97706] hover:bg-[#FFFBEB] transition-all">
-                      {t}
-                    </button>
-                  ))}
+                  {TEXTURES.map(t => (<button key={t} onClick={() => confirmSpecialMeal(t)} className="py-4 border-2 border-[#E5E5E5] rounded-xl font-medium text-[#3F2B1D] hover:border-[#D97706] hover:bg-[#FFFBEB] transition-all">{t}</button>))}
                </div>
             </div>
           </div>
@@ -365,27 +285,18 @@ export default function App() {
           <div className="flex justify-between items-center mb-5">
             <h2 className="text-2xl font-semibold text-[#3F2B1D] tracking-wide">預訂餐點</h2>
             {mealType === 'daily' && (
-              <button onClick={() => { setIsBulkMode(!isBulkMode); if(isBulkMode) setSelectedDates([selectedDates[0]]); }}
-                className={`text-sm px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 ${isBulkMode ? 'bg-[#D97706] text-white' : 'bg-[#F3F0EA] text-[#7A6455]'}`}>
-                <Layers size={18}/> {isBulkMode ? '完成選日' : '批量選日'}
-              </button>
+              <button onClick={() => { setIsBulkMode(!isBulkMode); if(isBulkMode) setSelectedDates([selectedDates[0]]); }} className={`text-sm px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 ${isBulkMode ? 'bg-[#D97706] text-white' : 'bg-[#F3F0EA] text-[#7A6455]'}`}><Layers size={18}/> {isBulkMode ? '完成選日' : '批量選日'}</button>
             )}
           </div>
-          
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x no-scrollbar">
             {upcomingDates.map((date) => {
-              const dateStr = formatDate(date);
+              const dateStr = getLocalDateFormat(date);
               const isSelected = selectedDates.includes(dateStr);
               const hasCartItem = !!cart[dateStr];
               return (
-                <button key={dateStr} onClick={() => handleDateSelect(date)}
-                  className={`snap-center flex-shrink-0 w-[4.5rem] py-3 rounded-2xl transition-all relative flex flex-col items-center justify-center
-                    ${isSelected ? 'bg-[#3F2B1D] text-white shadow-md' : 'bg-white border border-[#E5E5E5] text-[#7A6455]'}
-                    ${hasCartItem && !isSelected ? 'border-[#D97706] bg-[#FFFBEB]' : ''}
-                  `}>
+                <button key={dateStr} onClick={() => handleDateSelect(date)} className={`snap-center flex-shrink-0 w-[4.5rem] py-3 rounded-2xl transition-all relative flex flex-col items-center justify-center ${isSelected ? 'bg-[#3F2B1D] text-white shadow-md' : 'bg-white border border-[#E5E5E5] text-[#7A6455]'} ${hasCartItem && !isSelected ? 'border-[#D97706] bg-[#FFFBEB]' : ''}`}>
                   {hasCartItem && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D97706] rounded-full"></div>}
-                  <span className="text-[11px] font-medium mb-1">{['日','一','二','三','四','五','六'][date.getDay()]}</span>
-                  <span className="text-xl font-semibold">{date.getDate()}</span>
+                  <span className="text-[11px] font-medium mb-1">{['日','一','二','三','四','五','六'][date.getDay()]}</span><span className="text-xl font-semibold">{date.getDate()}</span>
                 </button>
               );
             })}
@@ -398,7 +309,6 @@ export default function App() {
         </div>
 
         <div className="p-5 space-y-8 animate-in slide-in-from-bottom-2">
-          
           {mealType === 'daily' && (
             <>
               <section>
@@ -408,7 +318,7 @@ export default function App() {
                     const isSelected = !!dailyForm.meals[m];
                     const isEditing = editingMeal === m;
                     let menuName = todayMenu[m] || '未有資料，以當日為準';
-                    const isRecommended = testResult && ['A', 'B'].includes(m); // 簡化示範
+                    const isRecommended = testResult && ['A', 'B'].includes(m); 
 
                     return (
                       <div key={m} className={`bg-white rounded-2xl transition-all overflow-hidden border ${isSelected ? 'border-[#D97706] shadow-md' : 'border-[#E5E5E5] shadow-sm'}`}>
@@ -461,33 +371,16 @@ export default function App() {
                   </div>
                 </div>
               </section>
-
-              <div className="pt-2 mb-8">
-                <button onClick={handleAddToCart}
-                  className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2
-                    ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) 
-                      ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>
-                  {isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}
-                </button>
-              </div>
+              <div className="pt-2 mb-8"><button onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>{isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}</button></div>
             </>
           )}
 
           {mealType === 'special' && (
             <div className="space-y-6">
-              <div className="bg-[#FFFBEB] p-4 rounded-2xl border border-[#FEF3C7] flex items-start gap-3">
-                 <Info size={20} className="text-[#D97706] shrink-0 mt-0.5"/>
-                 <p className="text-sm text-[#92400E] leading-relaxed">請喺上方日曆選擇**首個送餐日**，系統會自動按您選擇嘅日數安排膳食（逢星期日及紅日休息）。</p>
-              </div>
-
+              <div className="bg-[#FFFBEB] p-4 rounded-2xl border border-[#FEF3C7] flex items-start gap-3"><Info size={20} className="text-[#D97706] shrink-0 mt-0.5"/><p className="text-sm text-[#92400E] leading-relaxed">請喺上方日曆選擇**首個送餐日**，系統會自動按您選擇嘅日數安排膳食。</p></div>
               {SPECIAL_MEALS.map(special => (
                 <div key={special.id} className="bg-white rounded-2xl border border-[#E5E5E5] overflow-hidden shadow-sm">
-                  <div className="p-5 border-b border-[#F3F0EA]">
-                    <div className="flex items-center gap-3 mb-2">
-                       <div className="p-2 bg-[#F9FAF8] rounded-xl">{special.icon}</div><h3 className="text-xl font-bold text-[#3F2B1D]">{special.name}</h3>
-                    </div>
-                    <p className="text-sm text-[#7A6455] leading-relaxed">{special.desc}</p>
-                  </div>
+                  <div className="p-5 border-b border-[#F3F0EA]"><div className="flex items-center gap-3 mb-2"><div className="p-2 bg-[#F9FAF8] rounded-xl">{special.icon}</div><h3 className="text-xl font-bold text-[#3F2B1D]">{special.name}</h3></div><p className="text-sm text-[#7A6455] leading-relaxed">{special.desc}</p></div>
                   <div className="p-4 bg-[#FAFAF9] grid grid-cols-2 gap-3">
                     <button onClick={() => setSelectingSpecial({meal: special, duration: 7})} className="py-3 bg-white border border-[#E5E5E5] rounded-xl text-[#3F2B1D] font-medium text-sm hover:border-[#D97706] transition-colors active:scale-95">7日體驗</button>
                     <button onClick={() => setSelectingSpecial({meal: special, duration: 14})} className="py-3 bg-white border border-[#E5E5E5] rounded-xl text-[#3F2B1D] font-medium text-sm hover:border-[#D97706] transition-colors active:scale-95">14日療程</button>
@@ -503,15 +396,12 @@ export default function App() {
     );
   };
 
-  // 結帳介面
   const renderCartAndCheckout = () => {
     const cartDates = Object.keys(cart).sort();
     const renderCheckoutContainer = (title, subtitle, onBack, content) => (
       <div className="min-h-screen bg-[#FDFBF7] p-5 pt-8 font-sans animate-in slide-in-from-right-4 duration-300">
         {onBack && <button onClick={onBack} className="mb-6 text-[#7A6455] flex items-center gap-2 text-base font-medium"><ArrowLeft size={18}/> 返回</button>}
-        <h2 className="text-3xl font-semibold text-[#3F2B1D] mb-2">{title}</h2>
-        {subtitle && <p className="text-base text-[#7A6455] mb-8">{subtitle}</p>}
-        {content}
+        <h2 className="text-3xl font-semibold text-[#3F2B1D] mb-2">{title}</h2>{subtitle && <p className="text-base text-[#7A6455] mb-8">{subtitle}</p>}{content}
       </div>
     );
 
@@ -529,9 +419,7 @@ export default function App() {
                   return (
                     <div key={dateStr} className="bg-white p-5 rounded-2xl border border-[#E5E5E5] flex gap-5 items-start shadow-sm relative overflow-hidden">
                       {item.isSpecial && <div className="absolute top-0 left-0 w-1.5 h-full bg-[#D97706]"></div>}
-                      <div className="w-16 h-16 bg-[#F3F0EA] text-[#3F2B1D] rounded-xl flex flex-col justify-center items-center shrink-0">
-                        <span className="text-[10px] font-medium uppercase tracking-wider">{dateStr.substring(5, 7)}月</span><span className="text-2xl font-semibold leading-none mt-1">{dateStr.substring(8, 10)}</span>
-                      </div>
+                      <div className="w-16 h-16 bg-[#F3F0EA] text-[#3F2B1D] rounded-xl flex flex-col justify-center items-center shrink-0"><span className="text-[10px] font-medium uppercase tracking-wider">{dateStr.substring(5, 7)}月</span><span className="text-2xl font-semibold leading-none mt-1">{dateStr.substring(8, 10)}</span></div>
                       <div className="flex-1 min-w-0 pt-0.5">
                         {item.isSpecial ? (
                           <><div className="font-semibold text-lg text-[#D97706] mb-1">{item.specialName}</div><div className="text-sm text-[#7A6455]">包含 {item.duration} 個送餐日<br/>質感: {item.texture}<br/>(由 {formatDisplayDate(dateStr)} 起計)</div></>
@@ -577,7 +465,6 @@ export default function App() {
 
   const renderBlog = () => { return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
   
-  // 🆕 完美還原：單頁體質問卷 (Wizard)
   const renderTest = () => {
     if (testResult) {
       const info = CONSTITUTIONS[testResult];
@@ -606,9 +493,8 @@ export default function App() {
     const handleAnswer = (score) => {
       setTestAnswers(prev => ({...prev, [currentQ.id]: score}));
       if (testStep < TEST_QUESTIONS.length - 1) {
-        setTimeout(() => setTestStep(s => s + 1), 250); // 小延遲等佢睇到自己㩒咗咩
+        setTimeout(() => setTestStep(s => s + 1), 250); 
       } else {
-        // Submit Logic
         const a = {...testAnswers, [currentQ.id]: score};
         const scores = { B: a[1]||0, C: a[2]||0, D: ((a[3]||0)+(a[4]||0))/2, E: a[5]||0, F: a[6]||0, G: ((a[7]||0)+(a[8]||0))/2, H: a[9]||0, I: ((a[10]||0)+(a[11]||0))/2 };
         let maxScore = 0; let res = 'A';
@@ -621,108 +507,44 @@ export default function App() {
 
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col">
-        <div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm">
-          <div className="flex justify-between items-center mb-3">
-             <h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2>
-             <span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span>
-          </div>
-          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-             <div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div>
-          </div>
-        </div>
-
+        <div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div>
         <div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}>
-           <div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6">
-              <div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>
-                {currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}
-              </div>
-              <h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3>
-              <div className="flex flex-col gap-3">
-                 {[
-                   {val: 1, label: '從不'}, {val: 2, label: '很少'}, 
-                   {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}
-                 ].map(s => (
-                   <button key={s.val} onClick={() => handleAnswer(s.val)}
-                     className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center
-                       ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}>
-                     <span>{s.label}</span>
-                     <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span>
-                   </button>
-                 ))}
-              </div>
-           </div>
-           
-           <div className="flex justify-between px-2">
-             {testStep > 0 ? (
-               <button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>
-             ) : <div></div>}
-           </div>
+           <div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div>
+           <div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div>
         </div>
       </div>
     );
   };
 
-  // 🆕 升級版 Profile：加入更改密碼介面
   const renderProfile = () => {
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in relative">
-        
-        {/* 更改密碼彈窗 */}
         {showPwdChange && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-end sm:items-center">
              <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-[#3F2B1D] flex items-center gap-2"><Lock size={20}/> 更改密碼</h3>
-                  <button onClick={() => setShowPwdChange(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button>
-                </div>
-                <div className="space-y-4 mb-8">
-                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">舊密碼</label><input type="password" value={pwdForm.old} onChange={e=>setPwdForm(p=>({...p, old: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
-                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">新密碼</label><input type="password" value={pwdForm.new} onChange={e=>setPwdForm(p=>({...p, new: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
-                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">確認新密碼</label><input type="password" value={pwdForm.confirm} onChange={e=>setPwdForm(p=>({...p, confirm: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
-                </div>
+                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D] flex items-center gap-2"><Lock size={20}/> 更改密碼</h3><button onClick={() => setShowPwdChange(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
+                <div className="space-y-4 mb-8"><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">舊密碼</label><input type="password" value={pwdForm.old} onChange={e=>setPwdForm(p=>({...p, old: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">新密碼</label><input type="password" value={pwdForm.new} onChange={e=>setPwdForm(p=>({...p, new: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div><div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">確認新密碼</label><input type="password" value={pwdForm.confirm} onChange={e=>setPwdForm(p=>({...p, confirm: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div></div>
                 <button onClick={handleChangePassword} className="w-full py-4 bg-[#3F2B1D] text-white rounded-xl font-medium text-lg active:scale-95 transition-all">確認更改</button>
              </div>
           </div>
         )}
 
         <div className="bg-white px-5 py-8 border-b border-[#E5E5E5] shadow-sm">
-          {customerInfo ? (
-            <div className="flex items-center gap-5">
-              <div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div>
-              <div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div>
-            </div>
-          ) : (
-            <div><h2 className="text-2xl font-semibold text-[#3F2B1D] mb-2">我的帳戶</h2><p className="text-base text-[#7A6455] mb-6">登入後可以查看訂單及資料</p><button onClick={() => { setActiveTab('cart'); setCheckoutStep('login'); }} className="w-full py-3.5 bg-[#3F2B1D] text-white text-lg font-medium rounded-xl">立即登入</button></div>
-          )}
+          {customerInfo ? (<div className="flex items-center gap-5"><div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div><div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div></div>) : (<div><h2 className="text-2xl font-semibold text-[#3F2B1D] mb-2">我的帳戶</h2><p className="text-base text-[#7A6455] mb-6">登入後可以查看訂單及資料</p><button onClick={() => { setActiveTab('cart'); setCheckoutStep('login'); }} className="w-full py-3.5 bg-[#3F2B1D] text-white text-lg font-medium rounded-xl">立即登入</button></div>)}
         </div>
         
         {customerInfo && (
           <div className="p-5">
-            {/* 帳戶設定區塊 */}
             <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4">⚙️ 帳戶設定</h3>
-            <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden">
-               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center">
-                 <div><div className="text-sm font-medium text-[#3F2B1D]">送餐地址</div><div className="text-sm text-[#7A6455] mt-0.5">{customerInfo.address || '未填寫'}</div></div>
-                 <button onClick={() => { setActiveTab('cart'); setCheckoutStep('address'); }} className="text-[#D97706] text-sm font-medium px-3 py-1.5 bg-[#FFFBEB] rounded-lg">修改</button>
-               </div>
-               <button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left">
-                 <span className="text-sm font-medium text-[#3F2B1D]">修改密碼</span><ChevronRight size={18} className="text-gray-400"/>
-               </button>
-            </div>
+            <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden"><div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center"><div><div className="text-sm font-medium text-[#3F2B1D]">送餐地址</div><div className="text-sm text-[#7A6455] mt-0.5">{customerInfo.address || '未填寫'}</div></div><button onClick={() => { setActiveTab('cart'); setCheckoutStep('address'); }} className="text-[#D97706] text-sm font-medium px-3 py-1.5 bg-[#FFFBEB] rounded-lg">修改</button></div><button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left"><span className="text-sm font-medium text-[#3F2B1D]">修改密碼</span><ChevronRight size={18} className="text-gray-400"/></button></div>
 
             <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4">📝 您的近期紀錄</h3>
             {orderHistory.length === 0 ? <div className="bg-white p-8 rounded-2xl border border-[#E5E5E5] text-center shadow-sm"><p className="text-lg text-[#9CA3AF]">暫時未有任何紀錄</p></div> : (
               <div className="space-y-4">
                 {orderHistory.map(o => (
                   <div key={o.id} className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm">
-                    <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]">
-                       <span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span>
-                       <span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span>
-                    </div>
-                    <div className="text-base text-[#7A6455] space-y-2">
-                      {Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' ')})</span></div>)}
-                      {o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}
-                    </div>
+                    <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]"><span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span><span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span></div>
+                    <div className="text-base text-[#7A6455] space-y-2">{Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' ')})</span></div>)}{o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}</div>
                   </div>
                 ))}
               </div>
@@ -749,29 +571,11 @@ export default function App() {
         </div>
 
         <div className="absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-[#E5E5E5] px-1 pt-2 pb-safe flex justify-between items-end z-50">
-          <button onClick={() => { setActiveTab('home'); setCheckoutStep('cart'); }} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'home' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>
-            <CalendarDays size={26} strokeWidth={activeTab === 'home' ? 2.5 : 1.5} />
-            <span className="text-[10px] font-medium">點餐</span>
-          </button>
-          <button onClick={() => setActiveTab('blog')} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'blog' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>
-            <BookOpen size={26} strokeWidth={activeTab === 'blog' ? 2.5 : 1.5} />
-            <span className="text-[10px] font-medium">資訊</span>
-          </button>
-          <button onClick={() => { setActiveTab('cart'); if(checkoutStep === 'success') setCheckoutStep('cart'); }} className="flex flex-col items-center justify-end gap-1 flex-1 relative pb-2">
-            <div className={`relative w-[3.5rem] h-[3.5rem] rounded-full flex items-center justify-center -mt-7 shadow-sm border ${activeTab === 'cart' ? 'bg-[#D97706] border-[#D97706] text-white' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>
-              <ShoppingBag size={24} strokeWidth={activeTab === 'cart' ? 2 : 1.5} />
-              {cartItemCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#EF4444] rounded-full text-[10px] flex items-center justify-center text-white font-bold border-2 border-white">{cartItemCount}</span>}
-            </div>
-            <span className={`text-[10px] font-medium transition-colors ${activeTab === 'cart' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>購物車</span>
-          </button>
-          <button onClick={() => setActiveTab('test')} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'test' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>
-            <Activity size={26} strokeWidth={activeTab === 'test' ? 2.5 : 1.5} />
-            <span className="text-[10px] font-medium">體質</span>
-          </button>
-          <button onClick={() => { setActiveTab('profile'); setCheckoutStep('cart'); }} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'profile' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>
-            <User size={26} strokeWidth={activeTab === 'profile' ? 2.5 : 1.5} />
-            <span className="text-[10px] font-medium">我的</span>
-          </button>
+          <button onClick={() => { setActiveTab('home'); setCheckoutStep('cart'); }} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'home' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}><CalendarDays size={26} strokeWidth={activeTab === 'home' ? 2.5 : 1.5} /><span className="text-[10px] font-medium">點餐</span></button>
+          <button onClick={() => setActiveTab('blog')} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'blog' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}><BookOpen size={26} strokeWidth={activeTab === 'blog' ? 2.5 : 1.5} /><span className="text-[10px] font-medium">資訊</span></button>
+          <button onClick={() => { setActiveTab('cart'); if(checkoutStep === 'success') setCheckoutStep('cart'); }} className="flex flex-col items-center justify-end gap-1 flex-1 relative pb-2"><div className={`relative w-[3.5rem] h-[3.5rem] rounded-full flex items-center justify-center -mt-7 shadow-sm border ${activeTab === 'cart' ? 'bg-[#D97706] border-[#D97706] text-white' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}><ShoppingBag size={24} strokeWidth={activeTab === 'cart' ? 2 : 1.5} />{cartItemCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#EF4444] rounded-full text-[10px] flex items-center justify-center text-white font-bold border-2 border-white">{cartItemCount}</span>}</div><span className={`text-[10px] font-medium transition-colors ${activeTab === 'cart' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>購物車</span></button>
+          <button onClick={() => setActiveTab('test')} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'test' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}><Activity size={26} strokeWidth={activeTab === 'test' ? 2.5 : 1.5} /><span className="text-[10px] font-medium">體質</span></button>
+          <button onClick={() => { setActiveTab('profile'); setCheckoutStep('cart'); }} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'profile' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}><User size={26} strokeWidth={activeTab === 'profile' ? 2.5 : 1.5} /><span className="text-[10px] font-medium">我的</span></button>
         </div>
       </div>
       <style>{`.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1.25rem); }`}</style>
