@@ -8,9 +8,6 @@ import {
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore';
 
-// ==========================================
-// 🚀 Firebase 設定
-// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBs-iuaxif5Ruol0o95bvPHG7sAeBPIZCI",
   authDomain: "wecare-db-257a2.firebaseapp.com",
@@ -24,6 +21,7 @@ let db;
 try { const app = initializeApp(firebaseConfig); db = getFirestore(app); } catch (e) { console.error("Firebase 初始化失敗", e); }
 
 const TEXTURES = ['正', '碎', '免治', '分糊', '全糊'];
+const RICE_TEXTURES = ['正飯', '爛飯', '粥', '無需飯']; // 🆕 新增飯類選項
 const MEALS = ['A', 'B', 'C'];
 const WHATSAPP_NUM = "85246084299"; 
 
@@ -40,7 +38,11 @@ const isUnavailableDate = (date) => { if (date.getDay() === 0) return true; retu
 const getMinDate = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d; };
 const generateUpcomingDates = () => {
   const dates = []; let current = getMinDate();
-  for (let i = 0; i < 14; i++) { if (!isUnavailableDate(current)) dates.push(new Date(current)); current.setDate(current.getDate() + 1); }
+  // 🌟 延長至 30 個工作日
+  for (let i = 0; i < 30; i++) { 
+    if (!isUnavailableDate(current)) dates.push(new Date(current)); 
+    current.setDate(current.getDate() + 1); 
+  }
   return dates;
 };
 
@@ -83,16 +85,13 @@ export default function App() {
   const [dailyForm, setDailyForm] = useState({ meals: {}, soupQty: 0, fruitQty: 0 });
   const [editingMeal, setEditingMeal] = useState(null);
   const [selectingSpecial, setSelectingSpecial] = useState(null); 
+  const [specForm, setSpecForm] = useState({ texture: '', rice: '正飯' }); // 特別餐表單
 
-  // 登入/註冊狀態
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  
-  // 🆕 註冊/修改個人資料專用 Form (加入聯絡人名稱)
   const [profileForm, setProfileForm] = useState({ name: '', contactName: '', phone: '', address: '', password: '' });
   const [showProfileEdit, setShowProfileEdit] = useState(false);
-  
   const [referralCode, setReferralCode] = useState('');
   const [pwdForm, setPwdForm] = useState({ old: '', new: '', confirm: '' });
   const [showPwdChange, setShowPwdChange] = useState(false);
@@ -130,7 +129,12 @@ export default function App() {
   const handleAddToCart = () => {
     if (!selectedDates[0]) return;
     if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) return showToast("請最少選擇一款餐點或附加項目");
-    for (const [meal, texture] of Object.entries(dailyForm.meals)) { if (texture === true) return showToast(`請為 ${meal}餐 選擇質感`); }
+    
+    // 🌟 檢查是否選齊「質感」同「飯類」
+    for (const [meal, data] of Object.entries(dailyForm.meals)) { 
+      if (!data.texture) return showToast(`請為 ${meal}餐 選擇質感`); 
+      if (!data.rice) return showToast(`請為 ${meal}餐 選擇飯類`); 
+    }
 
     const newCart = { ...cart };
     selectedDates.forEach(dStr => { newCart[dStr] = { ...JSON.parse(JSON.stringify(dailyForm)), isSpecial: false }; });
@@ -146,12 +150,13 @@ export default function App() {
     }
   };
 
-  const confirmSpecialMeal = (texture) => {
+  const confirmSpecialMeal = () => {
+    if (!specForm.texture) return showToast("請選擇質感");
     const dStr = selectedDates[0];
     if (!dStr) return;
-    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: texture, soupQty: 0, fruitQty: 0, meals: {} } }));
-    showToast(`✅ 已將 ${selectingSpecial.meal.name} (${texture}) 加入購物車`);
-    setSelectingSpecial(null); setActiveTab('cart');
+    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: specForm.texture, rice: specForm.rice, soupQty: 0, fruitQty: 0, meals: {} } }));
+    showToast(`✅ 已將 ${selectingSpecial.meal.name} 加入購物車`);
+    setSelectingSpecial(null); setSpecForm({ texture: '', rice: '正飯' }); setActiveTab('cart');
   };
   
   const proceedToCheckout = () => {
@@ -160,7 +165,6 @@ export default function App() {
     else setCheckoutStep('login');
   };
 
-  // 🌟 真實 Firebase 登入
   const handleLogin = async (e) => {
     e?.preventDefault();
     if (loginPhone.length < 8) return showToast("請輸入有效的電話號碼");
@@ -174,14 +178,12 @@ export default function App() {
       const realPassword = custData.password || custData.phone;
       if (loginPassword !== realPassword) return showToast("密碼錯誤");
 
-      setCustomerInfo(custData); 
-      setProfileForm(custData);
+      setCustomerInfo(custData); setProfileForm(custData);
       setCheckoutStep(custData.address ? 'confirm' : 'address');
       showToast("登入成功！");
     } catch (err) { showToast("登入系統發生錯誤"); }
   };
 
-  // 🌟 真實 Firebase 註冊
   const handleRegister = async (e) => {
     e?.preventDefault();
     if (!profileForm.name || !profileForm.phone || !profileForm.password) return showToast("請填寫所有必填資料");
@@ -191,25 +193,14 @@ export default function App() {
       if (!snap.empty) return showToast("此電話號碼已經註冊，請直接登入");
 
       const newId = `U${profileForm.phone}`;
-      const newCustomerData = {
-        id: newId,
-        name: profileForm.name,
-        contactName: profileForm.contactName || '',
-        phone: profileForm.phone,
-        password: profileForm.password,
-        address: profileForm.address || '',
-        type: 'B2C 普通個人',
-        createdAt: new Date().toISOString()
-      };
+      const newCustomerData = { id: newId, name: profileForm.name, contactName: profileForm.contactName || '', phone: profileForm.phone, password: profileForm.password, address: profileForm.address || '', type: 'B2C 普通個人', createdAt: new Date().toISOString() };
       
       await setDoc(doc(db, 'customers', newId), newCustomerData);
-      setCustomerInfo(newCustomerData);
-      setCheckoutStep('confirm'); // 註冊完直接去確認訂單
+      setCustomerInfo(newCustomerData); setCheckoutStep('confirm'); 
       showToast("註冊成功！");
     } catch (err) { showToast("註冊失敗，請檢查網絡"); }
   };
 
-  // 🌟 修改個人資料
   const handleSaveProfile = async () => {
     try {
       await setDoc(doc(db, 'customers', customerInfo.id), profileForm, { merge: true });
@@ -240,13 +231,11 @@ export default function App() {
       const newOrders = [];
       for (const [dateStr, details] of Object.entries(cart)) {
         const counts = {};
-        if (details.isSpecial) counts[`特別餐_${details.specialName}(${details.duration}日)_${details.texture}`] = 1;
-        else Object.entries(details.meals).forEach(([mealCode, texture]) => { counts[`${mealCode}_${texture}`] = 1; });
+        // 🌟 更新：寫入完整 SKU 格式，包含飯類
+        if (details.isSpecial) counts[`特別餐_${details.specialName}(${details.duration}日)_${details.texture}_${details.rice}`] = 1;
+        else Object.entries(details.meals).forEach(([mealCode, data]) => { counts[`${mealCode}_${data.texture}_${data.rice}`] = 1; });
 
-        const orderData = {
-          date: dateStr, customerId: customerInfo.id, counts: counts, soupQty: details.soupQty || 0, 
-          fruitQty: details.fruitQty || 0, referralCode: referralCode.trim(), status: '處理中', timestamp: new Date().toISOString()
-        };
+        const orderData = { date: dateStr, customerId: customerInfo.id, counts: counts, soupQty: details.soupQty || 0, fruitQty: details.fruitQty || 0, referralCode: referralCode.trim(), status: '處理中', timestamp: new Date().toISOString() };
         const orderId = `${dateStr}_${customerInfo.id}`;
         await setDoc(doc(db, 'orders', orderId), orderData, { merge: true });
         newOrders.push({ id: orderId, ...orderData });
@@ -254,13 +243,9 @@ export default function App() {
       setOrderHistory(prev => [...newOrders, ...prev]); 
       setCart({}); setReferralCode(''); setCheckoutStep('success');
 
-      // 🔔 Webhook 通知
       const webhookUrl = "YOUR_WEBHOOK_URL_HERE"; 
       if (webhookUrl !== "YOUR_WEBHOOK_URL_HERE") {
-        fetch(webhookUrl, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customerName: customerInfo.name, contactName: customerInfo.contactName, phone: customerInfo.phone, orderCount: Object.keys(cart).length, totalItems: newOrders.length, time: new Date().toLocaleString() })
-        }).catch(e => console.log("Webhook 發送失敗", e));
+        fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerName: customerInfo.name, contactName: customerInfo.contactName, phone: customerInfo.phone, orderCount: Object.keys(cart).length, totalItems: newOrders.length, time: new Date().toLocaleString() }) }).catch(e => console.log("Webhook 發送失敗", e));
       }
     } catch (error) { showToast("提交訂單失敗，請檢查網絡"); }
   };
@@ -275,28 +260,46 @@ export default function App() {
   };
 
   const renderHome = () => {
-    if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 14 天沒有可送餐日子</div>;
+    if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 30 天沒有可送餐日子</div>;
 
     const dStr = selectedDates[0];
-    const todayMenu = menusData[dStr] || {}; // 🌟 已經清空假資料，直接讀 Firebase
+    const todayMenu = menusData[dStr] || {}; 
 
     const toggleMeal = (meal) => {
       if (dailyForm.meals[meal]) {
         const newMeals = { ...dailyForm.meals }; delete newMeals[meal]; setDailyForm({ ...dailyForm, meals: newMeals });
         if (editingMeal === meal) setEditingMeal(null);
-      } else { setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: true } }); setEditingMeal(meal); }
+      } else { 
+        // 🌟 初始化新加入嘅餐：未選質感，預設正飯
+        setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: { texture: '', rice: '正飯' } } }); 
+        setEditingMeal(meal); 
+      }
     };
-    const setTextureForMeal = (meal, texture) => { setDailyForm({ ...dailyForm, meals: { ...dailyForm.meals, [meal]: texture } }); setEditingMeal(null); };
+    
+    // 🌟 更新質感與飯類嘅 Function
+    const setTextureForMeal = (meal, texture) => { setDailyForm(p => ({ ...p, meals: { ...p.meals, [meal]: { ...(p.meals[meal] || {}), texture } } })); };
+    const setRiceForMeal = (meal, rice) => { setDailyForm(p => ({ ...p, meals: { ...p.meals, [meal]: { ...(p.meals[meal] || {}), rice } } })); };
 
     return (
       <div className="pb-32 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-500 relative">
+        
+        {/* 特別餐選擇質感與飯類 Modal */}
         {selectingSpecial && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center sm:items-center">
             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
-               <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D]">請選擇「{selectingSpecial.meal.name}」質感</h3><button onClick={() => setSelectingSpecial(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
-               <div className="grid grid-cols-2 gap-3 mb-6">
-                  {TEXTURES.map(t => (<button key={t} onClick={() => confirmSpecialMeal(t)} className="py-4 border-2 border-[#E5E5E5] rounded-xl font-medium text-[#3F2B1D] hover:border-[#D97706] hover:bg-[#FFFBEB] transition-all">{t}</button>))}
+               <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D]">「{selectingSpecial.meal.name}」選項</h3><button onClick={() => setSelectingSpecial(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
+               
+               <div className="text-sm text-[#7A6455] mb-2 font-medium">1. 選擇質感：</div>
+               <div className="grid grid-cols-3 gap-2 mb-4">
+                  {TEXTURES.map(t => (<button key={t} onClick={() => setSpecForm(p=>({...p, texture: t}))} className={`py-3 border-2 rounded-xl font-medium transition-all ${specForm.texture === t ? 'bg-[#3F2B1D] text-white border-[#3F2B1D]' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>{t}</button>))}
                </div>
+
+               <div className="text-sm text-[#7A6455] mb-2 font-medium">2. 選擇飯類：</div>
+               <div className="grid grid-cols-4 gap-2 mb-8">
+                  {RICE_TEXTURES.map(r => (<button key={r} onClick={() => setSpecForm(p=>({...p, rice: r}))} className={`py-3 border-2 rounded-xl font-medium transition-all text-sm ${specForm.rice === r ? 'bg-[#D97706] text-white border-[#D97706]' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>{r}</button>))}
+               </div>
+
+               <button onClick={confirmSpecialMeal} className="w-full py-4 bg-[#D97706] text-white text-lg font-medium rounded-xl active:scale-95 shadow-md">確認加入購物車</button>
             </div>
           </div>
         )}
@@ -335,9 +338,10 @@ export default function App() {
                 <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-medium text-[#3F2B1D]">1. 選擇主餐 <span className="text-sm text-[#9CA3AF] ml-2">可選多款</span></h3></div>
                 <div className="space-y-4">
                   {MEALS.map(m => {
-                    const isSelected = !!dailyForm.meals[m];
+                    const mealData = dailyForm.meals[m];
+                    const isSelected = !!mealData;
                     const isEditing = editingMeal === m;
-                    let menuName = todayMenu[m] || '未有資料，以當日為準'; // 🌟 直接讀取 Firebase 字串
+                    let menuName = todayMenu[m] || '未有資料，以當日為準'; 
 
                     return (
                       <div key={m} className={`bg-white rounded-2xl transition-all overflow-hidden border ${isSelected ? 'border-[#D97706] shadow-md' : 'border-[#E5E5E5] shadow-sm'}`}>
@@ -345,19 +349,27 @@ export default function App() {
                           <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shrink-0 ${isSelected ? 'bg-[#D97706] text-white' : 'bg-[#F3F0EA] text-[#7A6455]'}`}>{m}</div>
                           <div className="flex-1 pt-1">
                             <div className={`font-medium text-lg leading-snug ${isSelected ? 'text-[#3F2B1D]' : 'text-[#3F2B1D]'}`}>{menuName}</div>
-                            {isSelected && dailyForm.meals[m] !== true && <div className="text-sm text-[#7A6455] mt-1.5">已選質感: <span className="font-semibold text-[#D97706]">{dailyForm.meals[m]}</span></div>}
-                            {isSelected && dailyForm.meals[m] === true && <div className="text-sm text-[#EF4444] mt-1.5 font-medium">請在下方選擇質感</div>}
+                            {isSelected && mealData.texture && <div className="text-sm text-[#7A6455] mt-1.5">組合: <span className="font-semibold text-[#D97706]">{mealData.texture} + {mealData.rice}</span></div>}
+                            {isSelected && !mealData.texture && <div className="text-sm text-[#EF4444] mt-1.5 font-medium">請在下方選擇質感</div>}
                           </div>
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-2 ${isSelected ? 'bg-[#D97706] text-white' : 'border-2 border-[#E5E5E5] text-transparent'}`}><Check size={18} /></div>
                         </div>
 
+                        {/* 🌟 升級版：質感 + 飯類輸入 */}
                         {isEditing && (
-                          <div className="px-5 pb-5 pt-2 bg-[#FAFAF9] border-t border-[#E5E5E5] animate-in slide-in-from-top-2">
-                            <div className="text-sm text-[#7A6455] mb-3 font-medium">請選擇質感：</div>
-                            <div className="flex flex-wrap gap-2.5">
+                          <div className="px-5 pb-5 pt-4 bg-[#FAFAF9] border-t border-[#E5E5E5] animate-in slide-in-from-top-2">
+                            <div className="text-sm text-[#7A6455] mb-2 font-medium">請選擇質感：</div>
+                            <div className="flex flex-wrap gap-2 mb-5">
                               {TEXTURES.map(t => {
-                                const isTexSelected = dailyForm.meals[m] === t;
-                                return <button key={t} onClick={(e) => { e.stopPropagation(); setTextureForMeal(m, t); }} className={`px-5 py-3 rounded-xl text-base font-medium transition-colors border ${isTexSelected ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white' : 'bg-white border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}>{t}</button>;
+                                const isTexSelected = mealData.texture === t;
+                                return <button key={t} onClick={(e) => { e.stopPropagation(); setTextureForMeal(m, t); }} className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors border ${isTexSelected ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white' : 'bg-white border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}>{t}</button>;
+                              })}
+                            </div>
+                            <div className="text-sm text-[#7A6455] mb-2 font-medium">請選擇飯類：</div>
+                            <div className="flex flex-wrap gap-2">
+                              {RICE_TEXTURES.map(r => {
+                                const isRiceSelected = mealData.rice === r;
+                                return <button key={r} onClick={(e) => { e.stopPropagation(); setRiceForMeal(m, r); }} className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors border ${isRiceSelected ? 'bg-[#D97706] border-[#D97706] text-white' : 'bg-white border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}>{r}</button>;
                               })}
                             </div>
                           </div>
@@ -370,25 +382,34 @@ export default function App() {
 
               <section>
                 <h3 className="text-lg font-medium text-[#3F2B1D] mb-4">2. 附加項目 <span className="text-sm text-[#9CA3AF] ml-2">自由選擇</span></h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] flex flex-col shadow-sm">
-                    <div className="flex items-center gap-3 text-[#3F2B1D] mb-5"><Soup size={24} className="text-[#D97706]"/><span className="font-medium text-base">滋潤例湯</span></div>
-                    <div className="flex items-center gap-4 bg-[#FDFBF7] p-1.5 rounded-xl w-full justify-between border border-[#E5E5E5]">
-                      <button onClick={() => setDailyForm(p => ({...p, soupQty: Math.max(0, p.soupQty - 1)}))} className="w-10 h-10 flex items-center justify-center text-[#7A6455] bg-white rounded-lg shadow-sm text-xl font-medium">-</button>
-                      <span className="font-semibold text-xl text-[#3F2B1D]">{dailyForm.soupQty}</span>
-                      <button onClick={() => setDailyForm(p => ({...p, soupQty: p.soupQty + 1}))} className="w-10 h-10 flex items-center justify-center text-white bg-[#D97706] rounded-lg shadow-sm text-xl font-medium">+</button>
+                
+                {/* 🌟 升級版例湯：開關制 + 讀取 Menu */}
+                <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm mb-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3 text-[#3F2B1D]">
+                      <Soup size={24} className="text-[#D97706]"/>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-lg">滋潤例湯</span>
+                        <span className="text-sm text-[#7A6455] mt-1">{todayMenu.Soup || '是日精選靚湯'}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] flex flex-col shadow-sm">
-                    <div className="flex items-center gap-3 text-[#3F2B1D] mb-5"><Apple size={24} className="text-[#EF4444]"/><span className="font-medium text-base">是日生果</span></div>
-                    <div className="flex items-center gap-4 bg-[#FDFBF7] p-1.5 rounded-xl w-full justify-between border border-[#E5E5E5]">
-                      <button onClick={() => setDailyForm(p => ({...p, fruitQty: Math.max(0, p.fruitQty - 1)}))} className="w-10 h-10 flex items-center justify-center text-[#7A6455] bg-white rounded-lg shadow-sm text-xl font-medium">-</button>
-                      <span className="font-semibold text-xl text-[#3F2B1D]">{dailyForm.fruitQty}</span>
-                      <button onClick={() => setDailyForm(p => ({...p, fruitQty: p.fruitQty + 1}))} className="w-10 h-10 flex items-center justify-center text-white bg-[#EF4444] rounded-lg shadow-sm text-xl font-medium">+</button>
-                    </div>
+                    <button onClick={() => setDailyForm(p => ({...p, soupQty: p.soupQty ? 0 : 1}))}
+                      className={`w-14 h-8 rounded-full transition-colors relative ${dailyForm.soupQty ? 'bg-[#D97706]' : 'bg-[#D1D5DB]'}`}>
+                      <div className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-sm ${dailyForm.soupQty ? 'left-7' : 'left-1'}`}></div>
+                    </button>
                   </div>
                 </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] flex justify-between items-center shadow-sm">
+                   <div className="flex items-center gap-3 text-[#3F2B1D]"><Apple size={24} className="text-[#EF4444]"/><span className="font-medium text-lg">是日生果</span></div>
+                   <div className="flex items-center gap-4 bg-[#FDFBF7] p-1.5 rounded-xl border border-[#E5E5E5]">
+                      <button onClick={() => setDailyForm(p => ({...p, fruitQty: Math.max(0, p.fruitQty - 1)}))} className="w-10 h-10 flex items-center justify-center text-[#7A6455] bg-white rounded-lg shadow-sm text-xl font-medium">-</button>
+                      <span className="font-semibold text-xl text-[#3F2B1D] w-6 text-center">{dailyForm.fruitQty}</span>
+                      <button onClick={() => setDailyForm(p => ({...p, fruitQty: p.fruitQty + 1}))} className="w-10 h-10 flex items-center justify-center text-white bg-[#EF4444] rounded-lg shadow-sm text-xl font-medium">+</button>
+                   </div>
+                </div>
               </section>
+
               <div className="pt-2 mb-8"><button onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>{isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}</button></div>
             </>
           )}
@@ -440,10 +461,10 @@ export default function App() {
                       <div className="w-16 h-16 bg-[#F3F0EA] text-[#3F2B1D] rounded-xl flex flex-col justify-center items-center shrink-0"><span className="text-[10px] font-medium uppercase tracking-wider">{dateStr.substring(5, 7)}月</span><span className="text-2xl font-semibold leading-none mt-1">{dateStr.substring(8, 10)}</span></div>
                       <div className="flex-1 min-w-0 pt-0.5">
                         {item.isSpecial ? (
-                          <><div className="font-semibold text-lg text-[#D97706] mb-1">{item.specialName}</div><div className="text-sm text-[#7A6455]">包含 {item.duration} 個送餐日<br/>質感: {item.texture}<br/>(由 {formatDisplayDate(dateStr)} 起計)</div></>
+                          <><div className="font-semibold text-lg text-[#D97706] mb-1">{item.specialName}</div><div className="text-sm text-[#7A6455]">送餐日數: {item.duration} 日<br/>質感: {item.texture} + {item.rice}<br/>(由 {formatDisplayDate(dateStr)} 起)</div></>
                         ) : (
                           <>
-                            {Object.entries(item.meals).map(([m, t]) => (<div key={m} className="font-medium text-lg text-[#3F2B1D] mb-1.5">{m}餐 <span className="text-sm font-normal text-[#7A6455] border border-[#E5E5E5] rounded-lg px-2 py-0.5 ml-2 bg-[#F9FAF8] align-middle">{t === true ? '未選質感' : t}</span></div>))}
+                            {Object.entries(item.meals).map(([m, data]) => (<div key={m} className="font-medium text-lg text-[#3F2B1D] mb-1.5">{m}餐 <span className="text-sm font-normal text-[#7A6455] border border-[#E5E5E5] rounded-lg px-2 py-0.5 ml-2 bg-[#F9FAF8] align-middle">{data.texture ? `${data.texture} + ${data.rice}` : '未選齊'}</span></div>))}
                             <div className="text-sm text-[#7A6455] mt-3">{item.soupQty > 0 ? <span className="mr-4">🍲 例湯 x{item.soupQty}</span> : null}{item.fruitQty > 0 ? <span>🍎 生果 x{item.fruitQty}</span> : null}{Object.keys(item.meals).length === 0 && item.soupQty === 0 && item.fruitQty === 0 && '無附加項目'}</div>
                           </>
                         )}
@@ -460,16 +481,13 @@ export default function App() {
       );
     }
     
-    // 🌟 全新 Firebase 登入與註冊介面
     if (checkoutStep === 'login') return renderCheckoutContainer(
-      isLoginMode ? "登入系統" : "註冊新帳戶", 
-      isLoginMode ? "登入以管理訂單及資料" : "填寫資料成為會員", 
-      () => setCheckoutStep('cart'), 
+      isLoginMode ? "登入系統" : "註冊新帳戶", isLoginMode ? "登入以管理訂單及資料" : "填寫資料成為會員", () => setCheckoutStep('cart'), 
       <div className="space-y-6 mt-4">
         {isLoginMode ? (
           <form onSubmit={handleLogin} className="space-y-4">
             <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">手提電話號碼</label><input type="tel" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} placeholder="例如: 98765432" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
-            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">密碼 (首次登入請輸入電話號碼)</label><input type="password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} placeholder="輸入密碼" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">密碼 (首次登入請輸入電話)</label><input type="password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} placeholder="輸入密碼" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
             <button type="submit" className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-4 active:scale-95">登入並繼續</button>
             <button type="button" onClick={() => { setIsLoginMode(false); setProfileForm({name:'', contactName:'', phone:loginPhone, password:'', address:''}); }} className="w-full py-4 text-[#D97706] font-medium text-lg">未有帳號？點此註冊</button>
           </form>
@@ -486,7 +504,7 @@ export default function App() {
       </div>
     );
 
-    if (checkoutStep === 'address') return renderCheckoutContainer("送餐地址", "請提供詳細地址", () => setCheckoutStep('cart'), <><textarea value={profileForm.address || ''} onChange={e=>setProfileForm({...profileForm, address: e.target.value})} placeholder="請輸入大廈名稱、座數及樓層..." className="w-full bg-white border border-[#E5E5E5] p-5 rounded-xl outline-none focus:border-[#D97706] min-h-[160px] resize-none text-lg text-[#3F2B1D] leading-relaxed"></textarea><button onClick={handleSaveProfile} className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-6 active:scale-95">確定儲存</button></>);
+    if (checkoutStep === 'address') return renderCheckoutContainer("送餐地址", "請提供詳細地址", () => setCheckoutStep('cart'), <><textarea value={profileForm.address || ''} onChange={e=>setProfileForm(p=>({...p, address: e.target.value}))} placeholder="請輸入大廈名稱、座數及樓層..." className="w-full bg-white border border-[#E5E5E5] p-5 rounded-xl outline-none focus:border-[#D97706] min-h-[160px] resize-none text-lg text-[#3F2B1D] leading-relaxed"></textarea><button onClick={handleSaveProfile} className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-6 active:scale-95">確定儲存</button></>);
     
     if (checkoutStep === 'confirm') return renderCheckoutContainer(
       "最後確認", "請核對以下資料", () => setCheckoutStep('cart'),
@@ -509,31 +527,24 @@ export default function App() {
 
   const renderBlog = () => { return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
   
-  const renderTest = () => {
+  const renderTest = () => { /* 保持不變，已於之前版本完整還原 */
     if (testResult) {
       const info = CONSTITUTIONS[testResult]; const Icon = info.icon;
-      return (
-        <div className="min-h-screen bg-[#FDFBF7] p-5 pt-10 font-sans animate-in fade-in pb-24"><div className="text-center mb-8"><div className="text-sm tracking-widest text-[#9CA3AF] mb-3">分析結果</div><div className={`w-24 h-24 mx-auto rounded-full ${info.bg} ${info.color} flex items-center justify-center mb-5 shadow-sm`}><Icon size={40} strokeWidth={1.5}/></div><h2 className={`text-3xl font-semibold ${info.color} mb-3`}>{info.name}</h2><span className="text-sm bg-white border border-[#E5E5E5] px-4 py-1.5 rounded-full text-[#7A6455] shadow-sm">特徵：{info.tag}</span></div><div className="bg-white rounded-2xl p-6 border border-[#E5E5E5] mb-8 shadow-sm"><div className="flex items-center gap-2.5 mb-3 text-[#3F2B1D]"><CheckSquare size={20} className="text-[#D97706]"/> <span className="font-medium text-lg">系統已記錄您的體質</span></div><p className="text-base text-[#7A6455] leading-relaxed">往後在點餐時，系統會自動在適合您的菜式旁顯示推薦標籤，助您輕鬆選擇養生膳食。</p></div><button onClick={() => setActiveTab('home')} className="w-full bg-[#D97706] text-white font-medium text-lg py-4 rounded-2xl shadow-md mb-4">立即前往選餐</button><button onClick={() => { setTestResult(null); setTestAnswers({}); setTestStep(0); }} className="w-full text-[#9CA3AF] text-base py-3">重新測試</button></div>
-      );
+      return ( <div className="min-h-screen bg-[#FDFBF7] p-5 pt-10 font-sans animate-in fade-in pb-24"><div className="text-center mb-8"><div className="text-sm tracking-widest text-[#9CA3AF] mb-3">分析結果</div><div className={`w-24 h-24 mx-auto rounded-full ${info.bg} ${info.color} flex items-center justify-center mb-5 shadow-sm`}><Icon size={40} strokeWidth={1.5}/></div><h2 className={`text-3xl font-semibold ${info.color} mb-3`}>{info.name}</h2><span className="text-sm bg-white border border-[#E5E5E5] px-4 py-1.5 rounded-full text-[#7A6455] shadow-sm">特徵：{info.tag}</span></div><div className="bg-white rounded-2xl p-6 border border-[#E5E5E5] mb-8 shadow-sm"><div className="flex items-center gap-2.5 mb-3 text-[#3F2B1D]"><CheckSquare size={20} className="text-[#D97706]"/> <span className="font-medium text-lg">系統已記錄您的體質</span></div><p className="text-base text-[#7A6455] leading-relaxed">往後在點餐時，系統會自動在適合您的菜式旁顯示推薦標籤，助您輕鬆選擇養生膳食。</p></div><button onClick={() => setActiveTab('home')} className="w-full bg-[#D97706] text-white font-medium text-lg py-4 rounded-2xl shadow-md mb-4">立即前往選餐</button><button onClick={() => { setTestResult(null); setTestAnswers({}); setTestStep(0); }} className="w-full text-[#9CA3AF] text-base py-3">重新測試</button></div> );
     }
     const currentQ = TEST_QUESTIONS[testStep]; const progress = Math.round(((testStep + 1) / TEST_QUESTIONS.length) * 100);
     const handleAnswer = (score) => {
       setTestAnswers(prev => ({...prev, [currentQ.id]: score}));
       if (testStep < TEST_QUESTIONS.length - 1) setTimeout(() => setTestStep(s => s + 1), 250); 
       else {
-        const a = {...testAnswers, [currentQ.id]: score};
-        const scores = { B: a[1]||0, C: a[2]||0, D: ((a[3]||0)+(a[4]||0))/2, E: a[5]||0, F: a[6]||0, G: ((a[7]||0)+(a[8]||0))/2, H: a[9]||0, I: ((a[10]||0)+(a[11]||0))/2 };
+        const a = {...testAnswers, [currentQ.id]: score}; const scores = { B: a[1]||0, C: a[2]||0, D: ((a[3]||0)+(a[4]||0))/2, E: a[5]||0, F: a[6]||0, G: ((a[7]||0)+(a[8]||0))/2, H: a[9]||0, I: ((a[10]||0)+(a[11]||0))/2 };
         let maxScore = 0; let res = 'A'; Object.keys(scores).forEach(k => { if(scores[k] > maxScore) { maxScore = scores[k]; res = k; } });
-        const healthScore = ((a[12]||0)+(a[13]||0)+(a[14]||0)+(a[15]||0))/4;
-        if (maxScore < 3 && healthScore >= 3) res = 'A'; setTestResult(res); 
+        const healthScore = ((a[12]||0)+(a[13]||0)+(a[14]||0)+(a[15]||0))/4; if (maxScore < 3 && healthScore >= 3) res = 'A'; setTestResult(res); 
       }
     };
-    return (
-      <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div><div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}><div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div><div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div></div></div>
-    );
+    return ( <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div><div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}><div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div><div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div></div></div> );
   };
 
-  // 🌟 Profile 個人中心 (可修改所有資料)
   const renderProfile = () => {
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in relative">
@@ -547,7 +558,6 @@ export default function App() {
           </div>
         )}
         
-        {/* 🆕 修改個人資料彈窗 */}
         {showProfileEdit && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-end sm:items-center">
              <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
@@ -566,10 +576,7 @@ export default function App() {
         <div className="bg-white px-5 py-8 border-b border-[#E5E5E5] shadow-sm">
           {customerInfo ? (
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-5">
-                <div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div>
-                <div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div>
-              </div>
+              <div className="flex items-center gap-5"><div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div><div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div></div>
               <button onClick={() => setShowProfileEdit(true)} className="p-2 bg-gray-50 text-[#D97706] rounded-full"><Edit3 size={20}/></button>
             </div>
           ) : (
@@ -581,12 +588,8 @@ export default function App() {
           <div className="p-5">
             <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4 mt-2">⚙️ 帳戶設定</h3>
             <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden">
-               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-[#FAFAF9]">
-                 <div><div className="text-xs text-[#9CA3AF] mb-1">聯絡人名稱</div><div className="text-sm font-medium text-[#3F2B1D]">{customerInfo.contactName || '未提供'}</div></div>
-               </div>
-               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center">
-                 <div><div className="text-xs text-[#9CA3AF] mb-1">送餐地址</div><div className="text-sm text-[#7A6455]">{customerInfo.address || '未填寫'}</div></div>
-               </div>
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-[#FAFAF9]"><div><div className="text-xs text-[#9CA3AF] mb-1">聯絡人名稱</div><div className="text-sm font-medium text-[#3F2B1D]">{customerInfo.contactName || '未提供'}</div></div></div>
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center"><div><div className="text-xs text-[#9CA3AF] mb-1">送餐地址</div><div className="text-sm text-[#7A6455]">{customerInfo.address || '未填寫'}</div></div></div>
                <button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left"><span className="text-sm font-medium text-[#3F2B1D]">修改登入密碼</span><ChevronRight size={18} className="text-gray-400"/></button>
             </div>
 
@@ -596,7 +599,7 @@ export default function App() {
                 {orderHistory.map(o => (
                   <div key={o.id} className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm">
                     <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]"><span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span><span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span></div>
-                    <div className="text-base text-[#7A6455] space-y-2">{Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' ')})</span></div>)}{o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}</div>
+                    <div className="text-base text-[#7A6455] space-y-2">{Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' + ')})</span></div>)}{o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}</div>
                   </div>
                 ))}
               </div>
