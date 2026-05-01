@@ -3,11 +3,14 @@ import {
   Phone, Check, ShoppingBag, User, CalendarDays, 
   MapPin, Trash2, ChevronRight, ArrowLeft, Receipt, 
   BookOpen, Activity, Leaf, Flame, Snowflake, Wind, 
-  ShieldAlert, CheckSquare, Sparkles, Layers, Info, Soup, Apple, HeartPulse, Stethoscope, Lock
+  ShieldAlert, CheckSquare, Sparkles, Layers, Info, Soup, Apple, HeartPulse, Stethoscope, Lock, Edit3, X
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore';
 
+// ==========================================
+// 🚀 Firebase 設定
+// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBs-iuaxif5Ruol0o95bvPHG7sAeBPIZCI",
   authDomain: "wecare-db-257a2.firebaseapp.com",
@@ -18,46 +21,31 @@ const firebaseConfig = {
 };
 
 let db;
-try { app = initializeApp(firebaseConfig); db = getFirestore(app); } catch (e) { console.error("Firebase 初始化失敗", e); }
+try { const app = initializeApp(firebaseConfig); db = getFirestore(app); } catch (e) { console.error("Firebase 初始化失敗", e); }
 
 const TEXTURES = ['正', '碎', '免治', '分糊', '全糊'];
 const MEALS = ['A', 'B', 'C'];
 const WHATSAPP_NUM = "85246084299"; 
 
 const HK_HOLIDAYS = [
-  '2026-01-01', '2026-02-17', '2026-02-18', '2026-02-19', '2026-04-03', 
-  '2026-04-04', '2026-04-06', '2026-05-01', '2026-05-24', '2026-05-25', 
-  '2026-06-19', '2026-07-01', '2026-09-26', '2026-10-01', '2026-10-26', 
-  '2026-12-25', '2026-12-26'
+  '2026-01-01', '2026-02-17', '2026-02-18', '2026-02-19', '2026-04-03', '2026-04-04', '2026-04-06', '2026-05-01', '2026-05-24', '2026-05-25', '2026-06-19', '2026-07-01', '2026-09-26', '2026-10-01', '2026-10-26', '2026-12-25', '2026-12-26'
 ];
 
-// 🌟 修正時區 Bug：強制使用本地時區格式化日期
 const getLocalDateFormat = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 };
 
-const isUnavailableDate = (date) => {
-  if (date.getDay() === 0) return true; 
-  return HK_HOLIDAYS.includes(getLocalDateFormat(date)); 
-};
-
+const isUnavailableDate = (date) => { if (date.getDay() === 0) return true; return HK_HOLIDAYS.includes(getLocalDateFormat(date)); };
 const getMinDate = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d; };
 const generateUpcomingDates = () => {
-  const dates = []; 
-  let current = getMinDate();
-  for (let i = 0; i < 14; i++) { 
-    if (!isUnavailableDate(current)) dates.push(new Date(current));
-    current.setDate(current.getDate() + 1);
-  }
+  const dates = []; let current = getMinDate();
+  for (let i = 0; i < 14; i++) { if (!isUnavailableDate(current)) dates.push(new Date(current)); current.setDate(current.getDate() + 1); }
   return dates;
 };
 
 const formatDisplayDate = (dateStr) => {
-  const d = new Date(dateStr);
-  const days = ['日', '一', '二', '三', '四', '五', '六'];
+  const d = new Date(dateStr); const days = ['日', '一', '二', '三', '四', '五', '六'];
   return `${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
 };
 
@@ -67,35 +55,8 @@ const SPECIAL_MEALS = [
   { id: 'low_residue', name: '低渣餐', desc: '減少腸道消化負擔，適合腸胃手術前後或腸道極度敏感人士。', icon: <Stethoscope size={24} className="text-orange-500"/> }
 ];
 
-const CONSTITUTIONS = {
-  A: { id: 'A', name: "平和質", tag: "健康寶寶", color: "text-emerald-700", bg: "bg-emerald-50", icon: Leaf },
-  B: { id: 'B', name: "氣虛質", tag: "容易疲倦", color: "text-stone-600", bg: "bg-stone-100", icon: Activity },
-  C: { id: 'C', name: "陽虛質", tag: "畏寒怕冷", color: "text-sky-700", bg: "bg-sky-50", icon: Snowflake },
-  D: { id: 'D', name: "陰虛質", tag: "缺水乾柴", color: "text-orange-700", bg: "bg-orange-50", icon: Flame },
-  E: { id: 'E', name: "痰濕質", tag: "易肥體質", color: "text-amber-700", bg: "bg-amber-50", icon: Layers },
-  F: { id: 'F', name: "濕熱質", tag: "又油又濕", color: "text-red-700", bg: "bg-red-50", icon: Flame },
-  G: { id: 'G', name: "血瘀質", tag: "循環阻塞", color: "text-purple-700", bg: "bg-purple-50", icon: HeartPulse },
-  H: { id: 'H', name: "氣鬱質", tag: "情緒鬱悶", color: "text-indigo-700", bg: "bg-indigo-50", icon: Wind },
-  I: { id: 'I', name: "特稟質", tag: "過敏體質", color: "text-rose-700", bg: "bg-rose-50", icon: ShieldAlert }
-};
-
-const TEST_QUESTIONS = [
-  { id: 1, text: "容易覺得疲倦乏力，說話時不夠氣，稍微活動就容易出汗？" },
-  { id: 2, text: "比身邊的人更怕冷，手腳長年冰凍，偏好熱飲？" },
-  { id: 3, text: "覺得手心、腳心發熱，面色潮紅，經常口乾眼乾？" },
-  { id: 4, text: "夜間睡眠質素差、多夢，或容易心煩、盜汗？" },
-  { id: 5, text: "覺得身體沉重困倦，腹部鬆軟肥胖，喉嚨常有痰？" },
-  { id: 6, text: "面部容易出油、生暗瘡，常感到口苦或大便黏滯？" },
-  { id: 7, text: "面色偏向晦暗，皮膚容易撞瘀，或身體有固定刺痛感？" },
-  { id: 8, text: "生理期常有血塊、經痛？ / (男性) 舌下靜脈青紫脹起？" },
-  { id: 9, text: "常感到情緒低落、焦慮、無故嘆氣，或覺得胸悶？" },
-  { id: 10, text: "容易鼻塞、打噴嚏，或皮膚一抓就紅腫痕癢？" },
-  { id: 11, text: "對特定的食物、藥物或環境因素非常敏感？" },
-  { id: 12, text: "【健康指標】胃口良好，進食後腹部舒適無脹氣？", isReverse: true },
-  { id: 13, text: "【健康指標】起床後感到精力充沛，能應付一天工作？", isReverse: true },
-  { id: 14, text: "【健康指標】季節交替或氣候變化時，適應良好不易生病？", isReverse: true },
-  { id: 15, text: "【健康指標】大小便規律，且狀態正常？", isReverse: true }
-];
+const CONSTITUTIONS = { A: { id: 'A', name: "平和質", tag: "健康寶寶", color: "text-emerald-700", bg: "bg-emerald-50", icon: Leaf }, B: { id: 'B', name: "氣虛質", tag: "容易疲倦", color: "text-stone-600", bg: "bg-stone-100", icon: Activity }, C: { id: 'C', name: "陽虛質", tag: "畏寒怕冷", color: "text-sky-700", bg: "bg-sky-50", icon: Snowflake }, D: { id: 'D', name: "陰虛質", tag: "缺水乾柴", color: "text-orange-700", bg: "bg-orange-50", icon: Flame }, E: { id: 'E', name: "痰濕質", tag: "易肥體質", color: "text-amber-700", bg: "bg-amber-50", icon: Layers }, F: { id: 'F', name: "濕熱質", tag: "又油又濕", color: "text-red-700", bg: "bg-red-50", icon: Flame }, G: { id: 'G', name: "血瘀質", tag: "循環阻塞", color: "text-purple-700", bg: "bg-purple-50", icon: HeartPulse }, H: { id: 'H', name: "氣鬱質", tag: "情緒鬱悶", color: "text-indigo-700", bg: "bg-indigo-50", icon: Wind }, I: { id: 'I', name: "特稟質", tag: "過敏體質", color: "text-rose-700", bg: "bg-rose-50", icon: ShieldAlert } };
+const TEST_QUESTIONS = [ { id: 1, text: "容易覺得疲倦乏力，說話時不夠氣，稍微活動就容易出汗？" }, { id: 2, text: "比身邊的人更怕冷，手腳長年冰凍，偏好熱飲？" }, { id: 3, text: "覺得手心、腳心發熱，面色潮紅，經常口乾眼乾？" }, { id: 4, text: "夜間睡眠質素差、多夢，或容易心煩、盜汗？" }, { id: 5, text: "覺得身體沉重困倦，腹部鬆軟肥胖，喉嚨常有痰？" }, { id: 6, text: "面部容易出油、生暗瘡，常感到口苦或大便黏滯？" }, { id: 7, text: "面色偏向晦暗，皮膚容易撞瘀，或身體有固定刺痛感？" }, { id: 8, text: "生理期常有血塊、經痛？ / (男性) 舌下靜脈青紫脹起？" }, { id: 9, text: "常感到情緒低落、焦慮、無故嘆氣，或覺得胸悶？" }, { id: 10, text: "容易鼻塞、打噴嚏，或皮膚一抓就紅腫痕癢？" }, { id: 11, text: "對特定的食物、藥物或環境因素非常敏感？" }, { id: 12, text: "【健康指標】胃口良好，進食後腹部舒適無脹氣？", isReverse: true }, { id: 13, text: "【健康指標】起床後感到精力充沛，能應付一天工作？", isReverse: true }, { id: 14, text: "【健康指標】季節交替或氣候變化時，適應良好不易生病？", isReverse: true }, { id: 15, text: "【健康指標】大小便規律，且狀態正常？", isReverse: true } ];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -123,38 +84,37 @@ export default function App() {
   const [editingMeal, setEditingMeal] = useState(null);
   const [selectingSpecial, setSelectingSpecial] = useState(null); 
 
+  // 登入/註冊狀態
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [loginPhone, setLoginPhone] = useState('');
-  const [tempAddress, setTempAddress] = useState('');
-  const [referralCode, setReferralCode] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   
+  // 🆕 註冊/修改個人資料專用 Form (加入聯絡人名稱)
+  const [profileForm, setProfileForm] = useState({ name: '', contactName: '', phone: '', address: '', password: '' });
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
+  
+  const [referralCode, setReferralCode] = useState('');
   const [pwdForm, setPwdForm] = useState({ old: '', new: '', confirm: '' });
   const [showPwdChange, setShowPwdChange] = useState(false);
 
   useEffect(() => {
-    const fetchFirebaseData = async () => {
-      try {
-        if (!db) return;
-        const menusSnap = await getDocs(collection(db, 'menus'));
-        const mObj = {}; menusSnap.forEach(d => { mObj[d.id] = d.data(); });
-        const blogsSnap = await getDocs(collection(db, 'blogs'));
-        const bArr = blogsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        setMenusData(mObj); 
-        setBlogsData(bArr);
-      } catch (error) {}
-    };
-    fetchFirebaseData();
+    if (!db) return;
+    const unsubMenus = onSnapshot(collection(db, 'menus'), (snap) => {
+      const mObj = {}; snap.docs.forEach(d => { mObj[d.id] = d.data(); });
+      setMenusData(mObj);
+    });
+    const unsubBlogs = onSnapshot(collection(db, 'blogs'), (snap) => {
+      setBlogsData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => { unsubMenus(); unsubBlogs(); };
   }, []);
 
   useEffect(() => {
     if (mealType === 'daily' && !isBulkMode && selectedDates.length === 1 && selectedDates[0]) {
       const dateStr = selectedDates[0];
       const cartItem = cart[dateStr];
-      if (cartItem && !cartItem.isSpecial) {
-        setDailyForm(JSON.parse(JSON.stringify(cartItem)));
-      } else {
-        setDailyForm({ meals: {}, soupQty: 0, fruitQty: 0 });
-      }
+      if (cartItem && !cartItem.isSpecial) setDailyForm(JSON.parse(JSON.stringify(cartItem)));
+      else setDailyForm({ meals: {}, soupQty: 0, fruitQty: 0 });
       setEditingMeal(null);
     }
   }, [selectedDates, cart, isBulkMode, mealType]);
@@ -163,17 +123,14 @@ export default function App() {
 
   const handleDateSelect = (dateObj) => {
     const dStr = getLocalDateFormat(dateObj);
-    if (isBulkMode && mealType === 'daily') {
-      setSelectedDates(prev => prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort());
-    } else { setSelectedDates([dStr]); }
+    if (isBulkMode && mealType === 'daily') setSelectedDates(prev => prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort());
+    else setSelectedDates([dStr]);
   };
 
   const handleAddToCart = () => {
     if (!selectedDates[0]) return;
     if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) return showToast("請最少選擇一款餐點或附加項目");
-    for (const [meal, texture] of Object.entries(dailyForm.meals)) {
-      if (texture === true) return showToast(`請為 ${meal}餐 選擇質感`);
-    }
+    for (const [meal, texture] of Object.entries(dailyForm.meals)) { if (texture === true) return showToast(`請為 ${meal}餐 選擇質感`); }
 
     const newCart = { ...cart };
     selectedDates.forEach(dStr => { newCart[dStr] = { ...JSON.parse(JSON.stringify(dailyForm)), isSpecial: false }; });
@@ -181,9 +138,7 @@ export default function App() {
     
     if (!isBulkMode && selectedDates.length === 1) {
       const currentIndex = upcomingDates.findIndex(d => getLocalDateFormat(d) === selectedDates[0]);
-      if (currentIndex >= 0 && currentIndex < upcomingDates.length - 1) {
-        setSelectedDates([getLocalDateFormat(upcomingDates[currentIndex + 1])]);
-      }
+      if (currentIndex >= 0 && currentIndex < upcomingDates.length - 1) setSelectedDates([getLocalDateFormat(upcomingDates[currentIndex + 1])]);
       showToast("✅ 日常餐已儲存至購物車");
     } else if (isBulkMode) {
       showToast(`✅ 已成功套用至 ${selectedDates.length} 個日子`);
@@ -194,9 +149,7 @@ export default function App() {
   const confirmSpecialMeal = (texture) => {
     const dStr = selectedDates[0];
     if (!dStr) return;
-    setCart(prev => ({
-      ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: texture, soupQty: 0, fruitQty: 0, meals: {} }
-    }));
+    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: texture, soupQty: 0, fruitQty: 0, meals: {} } }));
     showToast(`✅ 已將 ${selectingSpecial.meal.name} (${texture}) 加入購物車`);
     setSelectingSpecial(null); setActiveTab('cart');
   };
@@ -207,12 +160,78 @@ export default function App() {
     else setCheckoutStep('login');
   };
 
-  const handleDemoLogin = (e) => {
+  // 🌟 真實 Firebase 登入
+  const handleLogin = async (e) => {
     e?.preventDefault();
-    if (loginPhone.length >= 8) {
-      setCustomerInfo({ id: `U${loginPhone}`, name: '用戶' + loginPhone.substring(0,4), phone: loginPhone, address: '' }); 
-      setCheckoutStep('address');
-    } else showToast("請輸入有效的電話號碼");
+    if (loginPhone.length < 8) return showToast("請輸入有效的電話號碼");
+    if (!loginPassword) return showToast("請輸入密碼");
+    try {
+      const q = query(collection(db, 'customers'), where("phone", "==", loginPhone));
+      const snap = await getDocs(q);
+      if (snap.empty) return showToast("找不到此電話號碼，請先註冊");
+      
+      const custData = snap.docs[0].data();
+      const realPassword = custData.password || custData.phone;
+      if (loginPassword !== realPassword) return showToast("密碼錯誤");
+
+      setCustomerInfo(custData); 
+      setProfileForm(custData);
+      setCheckoutStep(custData.address ? 'confirm' : 'address');
+      showToast("登入成功！");
+    } catch (err) { showToast("登入系統發生錯誤"); }
+  };
+
+  // 🌟 真實 Firebase 註冊
+  const handleRegister = async (e) => {
+    e?.preventDefault();
+    if (!profileForm.name || !profileForm.phone || !profileForm.password) return showToast("請填寫所有必填資料");
+    try {
+      const q = query(collection(db, 'customers'), where("phone", "==", profileForm.phone));
+      const snap = await getDocs(q);
+      if (!snap.empty) return showToast("此電話號碼已經註冊，請直接登入");
+
+      const newId = `U${profileForm.phone}`;
+      const newCustomerData = {
+        id: newId,
+        name: profileForm.name,
+        contactName: profileForm.contactName || '',
+        phone: profileForm.phone,
+        password: profileForm.password,
+        address: profileForm.address || '',
+        type: 'B2C 普通個人',
+        createdAt: new Date().toISOString()
+      };
+      
+      await setDoc(doc(db, 'customers', newId), newCustomerData);
+      setCustomerInfo(newCustomerData);
+      setCheckoutStep('confirm'); // 註冊完直接去確認訂單
+      showToast("註冊成功！");
+    } catch (err) { showToast("註冊失敗，請檢查網絡"); }
+  };
+
+  // 🌟 修改個人資料
+  const handleSaveProfile = async () => {
+    try {
+      await setDoc(doc(db, 'customers', customerInfo.id), profileForm, { merge: true });
+      setCustomerInfo(prev => ({ ...prev, ...profileForm }));
+      showToast("✅ 個人資料已成功更新");
+      setShowProfileEdit(false);
+      if (checkoutStep === 'address') setCheckoutStep('confirm');
+    } catch (err) { showToast("資料更新失敗"); }
+  };
+
+  const handleChangePassword = async () => {
+    if (pwdForm.new !== pwdForm.confirm) return showToast("兩次輸入的新密碼不一致");
+    if (pwdForm.new.length < 6) return showToast("密碼長度最少需要 6 位");
+    const realPassword = customerInfo.password || customerInfo.phone;
+    if (pwdForm.old !== realPassword) return showToast("舊密碼不正確");
+
+    try {
+      await setDoc(doc(db, 'customers', customerInfo.id), { password: pwdForm.new }, { merge: true });
+      setCustomerInfo(prev => ({ ...prev, password: pwdForm.new }));
+      showToast("✅ 密碼已成功更新");
+      setPwdForm({ old: '', new: '', confirm: '' }); setShowPwdChange(false);
+    } catch (err) { showToast("密碼更新失敗，請檢查網絡"); }
   };
 
   const submitFinalOrder = async () => {
@@ -234,14 +253,16 @@ export default function App() {
       }
       setOrderHistory(prev => [...newOrders, ...prev]); 
       setCart({}); setReferralCode(''); setCheckoutStep('success');
-    } catch (error) { showToast("提交訂單失敗，請檢查網絡"); }
-  };
 
-  const handleChangePassword = () => {
-    if (pwdForm.new !== pwdForm.confirm) return showToast("兩次輸入的新密碼不一致");
-    if (pwdForm.new.length < 6) return showToast("密碼長度最少需要6位");
-    showToast("✅ 密碼已成功更新");
-    setPwdForm({ old: '', new: '', confirm: '' }); setShowPwdChange(false);
+      // 🔔 Webhook 通知
+      const webhookUrl = "YOUR_WEBHOOK_URL_HERE"; 
+      if (webhookUrl !== "YOUR_WEBHOOK_URL_HERE") {
+        fetch(webhookUrl, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customerName: customerInfo.name, contactName: customerInfo.contactName, phone: customerInfo.phone, orderCount: Object.keys(cart).length, totalItems: newOrders.length, time: new Date().toLocaleString() })
+        }).catch(e => console.log("Webhook 發送失敗", e));
+      }
+    } catch (error) { showToast("提交訂單失敗，請檢查網絡"); }
   };
 
   const Toast = () => {
@@ -257,8 +278,7 @@ export default function App() {
     if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 14 天沒有可送餐日子</div>;
 
     const dStr = selectedDates[0];
-    let todayMenu = { A: '暫無資料', B: '暫無資料', C: '暫無資料' };
-    if (menusData && menusData[dStr]) todayMenu = menusData[dStr];
+    const todayMenu = menusData[dStr] || {}; // 🌟 已經清空假資料，直接讀 Firebase
 
     const toggleMeal = (meal) => {
       if (dailyForm.meals[meal]) {
@@ -317,8 +337,7 @@ export default function App() {
                   {MEALS.map(m => {
                     const isSelected = !!dailyForm.meals[m];
                     const isEditing = editingMeal === m;
-                    let menuName = todayMenu[m] || '未有資料，以當日為準';
-                    const isRecommended = testResult && ['A', 'B'].includes(m); 
+                    let menuName = todayMenu[m] || '未有資料，以當日為準'; // 🌟 直接讀取 Firebase 字串
 
                     return (
                       <div key={m} className={`bg-white rounded-2xl transition-all overflow-hidden border ${isSelected ? 'border-[#D97706] shadow-md' : 'border-[#E5E5E5] shadow-sm'}`}>
@@ -328,7 +347,6 @@ export default function App() {
                             <div className={`font-medium text-lg leading-snug ${isSelected ? 'text-[#3F2B1D]' : 'text-[#3F2B1D]'}`}>{menuName}</div>
                             {isSelected && dailyForm.meals[m] !== true && <div className="text-sm text-[#7A6455] mt-1.5">已選質感: <span className="font-semibold text-[#D97706]">{dailyForm.meals[m]}</span></div>}
                             {isSelected && dailyForm.meals[m] === true && <div className="text-sm text-[#EF4444] mt-1.5 font-medium">請在下方選擇質感</div>}
-                            {isRecommended && !isSelected && <div className="inline-flex items-center gap-1.5 mt-2 text-xs text-[#D97706] bg-[#FFFBEB] px-3 py-1 rounded-full font-medium"><Sparkles size={14}/> 適合您的體質</div>}
                           </div>
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-2 ${isSelected ? 'bg-[#D97706] text-white' : 'border-2 border-[#E5E5E5] text-transparent'}`}><Check size={18} /></div>
                         </div>
@@ -442,12 +460,38 @@ export default function App() {
       );
     }
     
-    if (checkoutStep === 'login') return renderCheckoutContainer("登入系統", "請輸入電話以完成登記", () => setCheckoutStep('cart'), <form onSubmit={handleDemoLogin} className="space-y-6 mt-4"><div><label className="text-sm font-medium text-[#7A6455] mb-2 block">手提電話號碼</label><input type="tel" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} placeholder="例如: 98765432" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div><button type="submit" className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-6 active:scale-95">登入並繼續</button></form>);
-    if (checkoutStep === 'address') return renderCheckoutContainer("送餐地址", "首次使用請提供詳細地址", () => setCheckoutStep('cart'), <><textarea value={tempAddress} onChange={e=>setTempAddress(e.target.value)} placeholder="請輸入大廈名稱、座數及樓層..." className="w-full bg-white border border-[#E5E5E5] p-5 rounded-xl outline-none focus:border-[#D97706] min-h-[160px] resize-none text-lg text-[#3F2B1D] leading-relaxed"></textarea><button onClick={() => { if(!tempAddress) return showToast("請輸入地址！"); setCustomerInfo(p=>({...p, address: tempAddress})); setCheckoutStep('confirm'); }} className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-6 active:scale-95">確定儲存</button></>);
+    // 🌟 全新 Firebase 登入與註冊介面
+    if (checkoutStep === 'login') return renderCheckoutContainer(
+      isLoginMode ? "登入系統" : "註冊新帳戶", 
+      isLoginMode ? "登入以管理訂單及資料" : "填寫資料成為會員", 
+      () => setCheckoutStep('cart'), 
+      <div className="space-y-6 mt-4">
+        {isLoginMode ? (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">手提電話號碼</label><input type="tel" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} placeholder="例如: 98765432" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">密碼 (首次登入請輸入電話號碼)</label><input type="password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} placeholder="輸入密碼" className="w-full bg-white border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
+            <button type="submit" className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-4 active:scale-95">登入並繼續</button>
+            <button type="button" onClick={() => { setIsLoginMode(false); setProfileForm({name:'', contactName:'', phone:loginPhone, password:'', address:''}); }} className="w-full py-4 text-[#D97706] font-medium text-lg">未有帳號？點此註冊</button>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">客戶名稱 (長者/用膳者) *</label><input type="text" value={profileForm.name} onChange={e=>setProfileForm({...profileForm, name: e.target.value})} placeholder="例如: 陳大文" required className="w-full bg-white border border-[#E5E5E5] px-5 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">聯絡人名稱 (例如: 子女) *</label><input type="text" value={profileForm.contactName} onChange={e=>setProfileForm({...profileForm, contactName: e.target.value})} placeholder="例如: 陳小姐" required className="w-full bg-white border border-[#E5E5E5] px-5 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">手提電話號碼 *</label><input type="tel" value={profileForm.phone} onChange={e=>setProfileForm({...profileForm, phone: e.target.value})} placeholder="例如: 98765432" required className="w-full bg-white border border-[#E5E5E5] px-5 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+            <div><label className="text-sm font-medium text-[#7A6455] mb-2 block">設定登入密碼 *</label><input type="password" value={profileForm.password} onChange={e=>setProfileForm({...profileForm, password: e.target.value})} placeholder="最少 6 位" required className="w-full bg-white border border-[#E5E5E5] px-5 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+            <button type="submit" className="w-full bg-[#D97706] text-white font-medium text-xl py-4 rounded-xl mt-4 active:scale-95">註冊並繼續</button>
+            <button type="button" onClick={() => setIsLoginMode(true)} className="w-full py-4 text-[#9CA3AF] font-medium text-lg">返回登入</button>
+          </form>
+        )}
+      </div>
+    );
+
+    if (checkoutStep === 'address') return renderCheckoutContainer("送餐地址", "請提供詳細地址", () => setCheckoutStep('cart'), <><textarea value={profileForm.address || ''} onChange={e=>setProfileForm({...profileForm, address: e.target.value})} placeholder="請輸入大廈名稱、座數及樓層..." className="w-full bg-white border border-[#E5E5E5] p-5 rounded-xl outline-none focus:border-[#D97706] min-h-[160px] resize-none text-lg text-[#3F2B1D] leading-relaxed"></textarea><button onClick={handleSaveProfile} className="w-full bg-[#3F2B1D] text-white font-medium text-xl py-4 rounded-xl mt-6 active:scale-95">確定儲存</button></>);
+    
     if (checkoutStep === 'confirm') return renderCheckoutContainer(
       "最後確認", "請核對以下資料", () => setCheckoutStep('cart'),
       <>
-        <div className="bg-white border border-[#E5E5E5] rounded-2xl p-6 mb-4 space-y-6 shadow-sm"><div className="flex gap-4 items-start"><MapPin size={24} className="text-[#D97706] shrink-0 mt-0.5" /><div><div className="text-lg font-medium text-[#3F2B1D] mb-1">{customerInfo.name} <span className="text-base text-[#7A6455]">({customerInfo.phone})</span></div><div className="text-base text-[#7A6455] leading-relaxed">{customerInfo.address}</div></div></div><div className="h-px bg-[#E5E5E5] w-full"></div><div className="flex gap-4 items-center"><Receipt size={24} className="text-[#D97706] shrink-0" /><div className="text-lg font-medium text-[#3F2B1D]">您合共預訂了 <span className="font-semibold text-[#D97706]">{cartDates.length}</span> 筆預約</div></div></div>
+        <div className="bg-white border border-[#E5E5E5] rounded-2xl p-6 mb-4 space-y-6 shadow-sm"><div className="flex gap-4 items-start"><MapPin size={24} className="text-[#D97706] shrink-0 mt-0.5" /><div><div className="text-lg font-medium text-[#3F2B1D] mb-1">{customerInfo.name} <span className="text-base text-[#7A6455]">({customerInfo.phone})</span></div><div className="text-sm text-[#9CA3AF] mb-1">聯絡人: {customerInfo.contactName || '無'}</div><div className="text-base text-[#7A6455] leading-relaxed">{customerInfo.address}</div></div></div><div className="h-px bg-[#E5E5E5] w-full"></div><div className="flex gap-4 items-center"><Receipt size={24} className="text-[#D97706] shrink-0" /><div className="text-lg font-medium text-[#3F2B1D]">您合共預訂了 <span className="font-semibold text-[#D97706]">{cartDates.length}</span> 筆預約</div></div></div>
         <div className="bg-white border border-[#E5E5E5] rounded-2xl p-6 mb-8 shadow-sm"><label className="text-sm font-medium text-[#7A6455] mb-2 block">推薦碼 (如有)</label><input type="text" value={referralCode} onChange={e => setReferralCode(e.target.value)} placeholder="輸入推薦碼..." className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-5 py-4 rounded-xl outline-none focus:border-[#D97706] text-lg font-medium text-[#3F2B1D]" /></div>
         <button onClick={submitFinalOrder} className="w-full bg-[#D97706] text-white font-medium text-xl py-4 rounded-2xl active:scale-95 shadow-md">確認送出訂單</button>
       </>
@@ -467,55 +511,29 @@ export default function App() {
   
   const renderTest = () => {
     if (testResult) {
-      const info = CONSTITUTIONS[testResult];
-      const Icon = info.icon;
+      const info = CONSTITUTIONS[testResult]; const Icon = info.icon;
       return (
-        <div className="min-h-screen bg-[#FDFBF7] p-5 pt-10 font-sans animate-in fade-in pb-24">
-          <div className="text-center mb-8">
-             <div className="text-sm tracking-widest text-[#9CA3AF] mb-3">分析結果</div>
-             <div className={`w-24 h-24 mx-auto rounded-full ${info.bg} ${info.color} flex items-center justify-center mb-5 shadow-sm`}><Icon size={40} strokeWidth={1.5}/></div>
-             <h2 className={`text-3xl font-semibold ${info.color} mb-3`}>{info.name}</h2>
-             <span className="text-sm bg-white border border-[#E5E5E5] px-4 py-1.5 rounded-full text-[#7A6455] shadow-sm">特徵：{info.tag}</span>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-[#E5E5E5] mb-8 shadow-sm">
-            <div className="flex items-center gap-2.5 mb-3 text-[#3F2B1D]"><CheckSquare size={20} className="text-[#D97706]"/> <span className="font-medium text-lg">系統已記錄您的體質</span></div>
-            <p className="text-base text-[#7A6455] leading-relaxed">往後在點餐時，系統會自動在適合您的菜式旁顯示推薦標籤，助您輕鬆選擇養生膳食。</p>
-          </div>
-          <button onClick={() => setActiveTab('home')} className="w-full bg-[#D97706] text-white font-medium text-lg py-4 rounded-2xl shadow-md mb-4">立即前往選餐</button>
-          <button onClick={() => { setTestResult(null); setTestAnswers({}); setTestStep(0); }} className="w-full text-[#9CA3AF] text-base py-3">重新測試</button>
-        </div>
+        <div className="min-h-screen bg-[#FDFBF7] p-5 pt-10 font-sans animate-in fade-in pb-24"><div className="text-center mb-8"><div className="text-sm tracking-widest text-[#9CA3AF] mb-3">分析結果</div><div className={`w-24 h-24 mx-auto rounded-full ${info.bg} ${info.color} flex items-center justify-center mb-5 shadow-sm`}><Icon size={40} strokeWidth={1.5}/></div><h2 className={`text-3xl font-semibold ${info.color} mb-3`}>{info.name}</h2><span className="text-sm bg-white border border-[#E5E5E5] px-4 py-1.5 rounded-full text-[#7A6455] shadow-sm">特徵：{info.tag}</span></div><div className="bg-white rounded-2xl p-6 border border-[#E5E5E5] mb-8 shadow-sm"><div className="flex items-center gap-2.5 mb-3 text-[#3F2B1D]"><CheckSquare size={20} className="text-[#D97706]"/> <span className="font-medium text-lg">系統已記錄您的體質</span></div><p className="text-base text-[#7A6455] leading-relaxed">往後在點餐時，系統會自動在適合您的菜式旁顯示推薦標籤，助您輕鬆選擇養生膳食。</p></div><button onClick={() => setActiveTab('home')} className="w-full bg-[#D97706] text-white font-medium text-lg py-4 rounded-2xl shadow-md mb-4">立即前往選餐</button><button onClick={() => { setTestResult(null); setTestAnswers({}); setTestStep(0); }} className="w-full text-[#9CA3AF] text-base py-3">重新測試</button></div>
       );
     }
-
-    const currentQ = TEST_QUESTIONS[testStep];
-    const progress = Math.round(((testStep + 1) / TEST_QUESTIONS.length) * 100);
-
+    const currentQ = TEST_QUESTIONS[testStep]; const progress = Math.round(((testStep + 1) / TEST_QUESTIONS.length) * 100);
     const handleAnswer = (score) => {
       setTestAnswers(prev => ({...prev, [currentQ.id]: score}));
-      if (testStep < TEST_QUESTIONS.length - 1) {
-        setTimeout(() => setTestStep(s => s + 1), 250); 
-      } else {
+      if (testStep < TEST_QUESTIONS.length - 1) setTimeout(() => setTestStep(s => s + 1), 250); 
+      else {
         const a = {...testAnswers, [currentQ.id]: score};
         const scores = { B: a[1]||0, C: a[2]||0, D: ((a[3]||0)+(a[4]||0))/2, E: a[5]||0, F: a[6]||0, G: ((a[7]||0)+(a[8]||0))/2, H: a[9]||0, I: ((a[10]||0)+(a[11]||0))/2 };
-        let maxScore = 0; let res = 'A';
-        Object.keys(scores).forEach(k => { if(scores[k] > maxScore) { maxScore = scores[k]; res = k; } });
+        let maxScore = 0; let res = 'A'; Object.keys(scores).forEach(k => { if(scores[k] > maxScore) { maxScore = scores[k]; res = k; } });
         const healthScore = ((a[12]||0)+(a[13]||0)+(a[14]||0)+(a[15]||0))/4;
-        if (maxScore < 3 && healthScore >= 3) res = 'A'; 
-        setTestResult(res); 
+        if (maxScore < 3 && healthScore >= 3) res = 'A'; setTestResult(res); 
       }
     };
-
     return (
-      <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col">
-        <div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div>
-        <div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}>
-           <div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div>
-           <div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div>
-        </div>
-      </div>
+      <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans flex flex-col"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10 shadow-sm"><div className="flex justify-between items-center mb-3"><h2 className="text-2xl font-semibold text-[#3F2B1D]">體質自測</h2><span className="text-sm font-medium text-[#D97706]">{testStep + 1} / {TEST_QUESTIONS.length}</span></div><div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"><div className="bg-[#D97706] h-full transition-all duration-300" style={{width: `${progress}%`}}></div></div></div><div className="flex-1 p-5 flex flex-col justify-center animate-in slide-in-from-right-4 duration-300" key={testStep}><div className="bg-white p-8 rounded-3xl border border-[#E5E5E5] shadow-sm mb-6"><div className={`text-sm font-semibold mb-4 tracking-wider ${currentQ.isReverse ? 'text-[#10B981]' : 'text-[#D97706]'}`}>{currentQ.isReverse ? `健康指標` : `第 ${testStep + 1} 題`}</div><h3 className="text-2xl text-[#3F2B1D] mb-8 leading-snug font-medium">{currentQ.text}</h3><div className="flex flex-col gap-3">{[{val: 1, label: '從不'}, {val: 2, label: '很少'}, {val: 3, label: '有時'}, {val: 4, label: '經常'}, {val: 5, label: '總是'}].map(s => (<button key={s.val} onClick={() => handleAnswer(s.val)} className={`w-full py-4 px-6 rounded-2xl text-lg font-medium transition-all border flex justify-between items-center ${testAnswers[currentQ.id] === s.val ? 'bg-[#3F2B1D] border-[#3F2B1D] text-white shadow-md scale-[1.02]' : 'bg-[#F9FAF8] border-[#E5E5E5] text-[#7A6455] hover:border-[#D97706]'}`}><span>{s.label}</span><span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${testAnswers[currentQ.id] === s.val ? 'bg-white/20' : 'bg-white border'}`}>{s.val}</span></button>))}</div></div><div className="flex justify-between px-2">{testStep > 0 ? (<button onClick={() => setTestStep(s => s - 1)} className="text-[#9CA3AF] font-medium flex items-center gap-1 py-2"><ArrowLeft size={16}/> 上一題</button>) : <div></div>}</div></div></div>
     );
   };
 
+  // 🌟 Profile 個人中心 (可修改所有資料)
   const renderProfile = () => {
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in relative">
@@ -528,15 +546,49 @@ export default function App() {
              </div>
           </div>
         )}
+        
+        {/* 🆕 修改個人資料彈窗 */}
+        {showProfileEdit && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-end sm:items-center">
+             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D] flex items-center gap-2"><Edit3 size={20}/> 修改個人資料</h3><button onClick={() => setShowProfileEdit(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
+                <div className="space-y-4 mb-8">
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">客戶名稱 (長者/用膳者)</label><input type="text" value={profileForm.name || ''} onChange={e=>setProfileForm(p=>({...p, name: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">聯絡人名稱 (例如: 子女)</label><input type="text" value={profileForm.contactName || ''} onChange={e=>setProfileForm(p=>({...p, contactName: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706]" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">手提電話 (登入用)</label><input type="tel" value={profileForm.phone || ''} disabled className="w-full bg-gray-100 border border-[#E5E5E5] px-4 py-3 rounded-xl text-gray-500" /></div>
+                  <div><label className="text-sm font-medium text-[#7A6455] mb-1.5 block">送餐地址</label><textarea value={profileForm.address || ''} onChange={e=>setProfileForm(p=>({...p, address: e.target.value}))} className="w-full bg-[#F9FAF8] border border-[#E5E5E5] px-4 py-3 rounded-xl outline-none focus:border-[#D97706] min-h-[100px] resize-none"></textarea></div>
+                </div>
+                <button onClick={handleSaveProfile} className="w-full py-4 bg-[#D97706] text-white rounded-xl font-medium text-lg active:scale-95 transition-all">儲存資料</button>
+             </div>
+          </div>
+        )}
 
         <div className="bg-white px-5 py-8 border-b border-[#E5E5E5] shadow-sm">
-          {customerInfo ? (<div className="flex items-center gap-5"><div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div><div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div></div>) : (<div><h2 className="text-2xl font-semibold text-[#3F2B1D] mb-2">我的帳戶</h2><p className="text-base text-[#7A6455] mb-6">登入後可以查看訂單及資料</p><button onClick={() => { setActiveTab('cart'); setCheckoutStep('login'); }} className="w-full py-3.5 bg-[#3F2B1D] text-white text-lg font-medium rounded-xl">立即登入</button></div>)}
+          {customerInfo ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-5">
+                <div className="w-16 h-16 bg-[#F3F0EA] text-[#7A6455] rounded-full flex items-center justify-center"><User size={32} strokeWidth={1.5}/></div>
+                <div><h2 className="text-2xl font-semibold text-[#3F2B1D]">{customerInfo.name}</h2><div className="text-base text-[#7A6455] mt-1">{customerInfo.phone}</div></div>
+              </div>
+              <button onClick={() => setShowProfileEdit(true)} className="p-2 bg-gray-50 text-[#D97706] rounded-full"><Edit3 size={20}/></button>
+            </div>
+          ) : (
+            <div><h2 className="text-2xl font-semibold text-[#3F2B1D] mb-2">我的帳戶</h2><p className="text-base text-[#7A6455] mb-6">登入後可以查看訂單及資料</p><button onClick={() => { setActiveTab('cart'); setCheckoutStep('login'); }} className="w-full py-3.5 bg-[#3F2B1D] text-white text-lg font-medium rounded-xl">立即登入</button></div>
+          )}
         </div>
         
         {customerInfo && (
           <div className="p-5">
-            <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4">⚙️ 帳戶設定</h3>
-            <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden"><div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center"><div><div className="text-sm font-medium text-[#3F2B1D]">送餐地址</div><div className="text-sm text-[#7A6455] mt-0.5">{customerInfo.address || '未填寫'}</div></div><button onClick={() => { setActiveTab('cart'); setCheckoutStep('address'); }} className="text-[#D97706] text-sm font-medium px-3 py-1.5 bg-[#FFFBEB] rounded-lg">修改</button></div><button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left"><span className="text-sm font-medium text-[#3F2B1D]">修改密碼</span><ChevronRight size={18} className="text-gray-400"/></button></div>
+            <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4 mt-2">⚙️ 帳戶設定</h3>
+            <div className="bg-white rounded-2xl border border-[#E5E5E5] shadow-sm mb-8 overflow-hidden">
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center bg-[#FAFAF9]">
+                 <div><div className="text-xs text-[#9CA3AF] mb-1">聯絡人名稱</div><div className="text-sm font-medium text-[#3F2B1D]">{customerInfo.contactName || '未提供'}</div></div>
+               </div>
+               <div className="p-4 border-b border-[#E5E5E5] flex justify-between items-center">
+                 <div><div className="text-xs text-[#9CA3AF] mb-1">送餐地址</div><div className="text-sm text-[#7A6455]">{customerInfo.address || '未填寫'}</div></div>
+               </div>
+               <button onClick={() => setShowPwdChange(true)} className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors text-left"><span className="text-sm font-medium text-[#3F2B1D]">修改登入密碼</span><ChevronRight size={18} className="text-gray-400"/></button>
+            </div>
 
             <h3 className="text-sm font-medium text-[#9CA3AF] tracking-widest uppercase mb-4">📝 您的近期紀錄</h3>
             {orderHistory.length === 0 ? <div className="bg-white p-8 rounded-2xl border border-[#E5E5E5] text-center shadow-sm"><p className="text-lg text-[#9CA3AF]">暫時未有任何紀錄</p></div> : (
