@@ -6,7 +6,7 @@ import {
   ShieldAlert, CheckSquare, Sparkles, Layers, Info, Soup, Apple, HeartPulse
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, setDoc } from 'firebase/firestore';
 
 // ==========================================
 // 🚀 Firebase 設定 (使用你的環境)
@@ -51,26 +51,10 @@ const formatDisplayDate = (dateStr) => {
 // 🥗 模擬數據 (Firebase 失敗時的後備)
 // ==========================================
 const FALLBACK_MENUS = {
-  0: { 
-    A: { name: '南瓜蒸排骨', rec: ['A', 'B', 'C'] }, 
-    B: { name: '冬菇蒸滑雞', rec: ['A', 'B', 'H'] }, 
-    C: { name: '羅漢齋 (素)', rec: ['E', 'F', 'D'] } 
-  },
-  1: { 
-    A: { name: '番茄炒蛋', rec: ['A', 'D', 'H'] }, 
-    B: { name: '梅菜扣肉', rec: ['A', 'C'] }, 
-    C: { name: '清炒菜心', rec: ['A', 'E', 'F', 'G'] } 
-  },
-  2: { 
-    A: { name: '洋蔥豬扒', rec: ['A', 'C', 'G'] }, 
-    B: { name: '肉餅蒸水蛋', rec: ['A', 'B', 'D'] }, 
-    C: { name: '南乳齋煲', rec: ['A', 'C', 'E'] } 
-  },
-  3: { 
-    A: { name: '西芹炒雞柳', rec: ['A', 'G', 'H'] }, 
-    B: { name: '煎釀三寶', rec: ['A', 'E'] }, 
-    C: { name: '蒜蓉西蘭花', rec: ['A', 'D', 'F'] } 
-  },
+  0: { A: { name: '南瓜蒸排骨', rec: ['A', 'B', 'C'] }, B: { name: '冬菇蒸滑雞', rec: ['A', 'B', 'H'] }, C: { name: '羅漢齋 (素)', rec: ['E', 'F', 'D'] } },
+  1: { A: { name: '番茄炒蛋', rec: ['A', 'D', 'H'] }, B: { name: '梅菜扣肉', rec: ['A', 'C'] }, C: { name: '清炒菜心', rec: ['A', 'E', 'F', 'G'] } },
+  2: { A: { name: '洋蔥豬扒', rec: ['A', 'C', 'G'] }, B: { name: '肉餅蒸水蛋', rec: ['A', 'B', 'D'] }, C: { name: '南乳齋煲', rec: ['A', 'C', 'E'] } },
+  3: { A: { name: '西芹炒雞柳', rec: ['A', 'G', 'H'] }, B: { name: '煎釀三寶', rec: ['A', 'E'] }, C: { name: '蒜蓉西蘭花', rec: ['A', 'D', 'F'] } },
 };
 
 const FALLBACK_BLOGS = [
@@ -115,12 +99,10 @@ const TEST_QUESTIONS = [
 // 📱 主程式
 // ==========================================
 export default function App() {
-  // --- 頂層狀態 ---
   const [activeTab, setActiveTab] = useState('home');
   const [checkoutStep, setCheckoutStep] = useState('cart'); 
   const [customerInfo, setCustomerInfo] = useState(null);
   
-  // 體質檢測狀態
   const [testAnswers, setTestAnswers] = useState({});
   const [testResult, setTestResult] = useState(null); 
   
@@ -128,11 +110,9 @@ export default function App() {
   const [expandedBlog, setExpandedBlog] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  // --- 數據來源狀態 (Firebase) ---
   const [menusData, setMenusData] = useState({});
   const [blogsData, setBlogsData] = useState([]);
 
-  // --- 購物車與點餐狀態 ---
   const [cart, setCart] = useState({});
   const upcomingDates = useMemo(() => generateUpcomingDates(30), []);
   const [isBulkMode, setIsBulkMode] = useState(false);
@@ -140,11 +120,9 @@ export default function App() {
   const [dailyForm, setDailyForm] = useState({ meals: {}, soupQty: 0, fruitQty: 0 });
   const [editingMeal, setEditingMeal] = useState(null);
 
-  // 結帳邏輯
   const [loginPhone, setLoginPhone] = useState('');
   const [tempAddress, setTempAddress] = useState('');
 
-  // 讀取 Firebase 數據
   useEffect(() => {
     const fetchFirebaseData = async () => {
       try {
@@ -164,7 +142,6 @@ export default function App() {
     fetchFirebaseData();
   }, []);
 
-  // 同步購物車與表單
   useEffect(() => {
     if (!isBulkMode && selectedDates.length === 1) {
       const dateStr = selectedDates[0];
@@ -189,8 +166,6 @@ export default function App() {
     if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0 && dailyForm.fruitQty === 0) {
       return showToast("請最少選擇一款餐點或附加項目");
     }
-    
-    // 檢查是否有未選質感的餐
     for (const [meal, texture] of Object.entries(dailyForm.meals)) {
       if (texture === true) return showToast(`請為 ${meal}餐 選擇質感`);
     }
@@ -219,26 +194,49 @@ export default function App() {
   const handleDemoLogin = (e) => {
     e?.preventDefault();
     if (loginPhone.length >= 8) {
-      setCustomerInfo({ id: 'U123', name: '陳大文', phone: loginPhone, address: '九龍觀塘巧明街 1 號大廈' }); 
+      setCustomerInfo({ id: `U${loginPhone}`, name: '陳大文', phone: loginPhone, address: '九龍觀塘巧明街 1 號大廈' }); 
       setTempAddress('九龍觀塘巧明街 1 號大廈'); 
       setCheckoutStep('confirm');
     } else showToast("請輸入有效的電話號碼");
   };
 
   const submitFinalOrder = async () => {
-    const newOrders = Object.entries(cart).map(([dateStr, details]) => {
-      const counts = {};
-      Object.entries(details.meals).forEach(([mealCode, texture]) => { counts[`${mealCode}_${texture}`] = 1; });
-      return { id: `ORD-${Date.now()}-${dateStr.slice(-2)}`, date: dateStr, status: '處理中', counts, soupQty: details.soupQty, fruitQty: details.fruitQty };
-    });
-    setOrderHistory(prev => [...newOrders, ...prev]); 
-    setCart({}); 
-    setCheckoutStep('success');
+    if (!customerInfo || !customerInfo.id) return showToast("請先登入及填寫送餐資料");
+
+    try {
+      const newOrders = [];
+      
+      for (const [dateStr, details] of Object.entries(cart)) {
+        const counts = {};
+        Object.entries(details.meals).forEach(([mealCode, texture]) => { 
+          counts[`${mealCode}_${texture}`] = 1; 
+        });
+
+        const orderData = {
+          date: dateStr, 
+          customerId: customerInfo.id, 
+          counts: counts, 
+          soupQty: details.soupQty || 0, 
+          fruitQty: details.fruitQty || 0,
+          status: '處理中',
+          timestamp: new Date().toISOString()
+        };
+
+        const orderId = `${dateStr}_${customerInfo.id}`;
+        
+        await setDoc(doc(db, 'orders', orderId), orderData, { merge: true });
+        newOrders.push({ id: orderId, ...orderData });
+      }
+
+      setOrderHistory(prev => [...newOrders, ...prev]); 
+      setCart({}); 
+      setCheckoutStep('success');
+    } catch (error) {
+      console.error("提交訂單失敗:", error);
+      showToast("提交訂單失敗，請檢查網絡");
+    }
   };
 
-  // ==========================================
-  // 📱 UI組件: Toast 提示
-  // ==========================================
   const Toast = () => {
     if (!toastMsg) return null;
     return (
@@ -251,9 +249,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 UI: 點餐首頁 (優雅大字版)
-  // ==========================================
   const renderHome = () => {
     const dStr = selectedDates[0];
     const primaryDateObj = new Date(dStr);
@@ -279,7 +274,6 @@ export default function App() {
 
     return (
       <div className="pb-32 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-500">
-        {/* 頂部導航與日曆 */}
         <div className="bg-white px-5 py-5 border-b border-[#E5E5E5] sticky top-0 z-20 shadow-sm">
           <div className="flex justify-between items-center mb-5">
             <h2 className="text-2xl font-semibold text-[#3F2B1D] tracking-wide">預訂餐點</h2>
@@ -401,7 +395,6 @@ export default function App() {
           </section>
         </div>
 
-        {/* 固定喺內容最下方嘅按鈕，無再懸浮 */}
         <div className="px-5 mt-2 mb-8">
            <button 
               onClick={handleAddToCart}
@@ -417,9 +410,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 UI: 博客資訊 (優雅大字版)
-  // ==========================================
   const renderBlog = () => {
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-300">
@@ -457,9 +447,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 UI: 體質檢測 (15題完整版)
-  // ==========================================
   const renderTest = () => {
     const submitTest = () => {
       if (Object.keys(testAnswers).length < 15) return showToast("請回答所有15條問題以獲取準確結果");
@@ -475,7 +462,7 @@ export default function App() {
       Object.keys(scores).forEach(k => { if(scores[k] > maxScore) { maxScore = scores[k]; res = k; } });
       
       const healthScore = ((a[12]||0)+(a[13]||0)+(a[14]||0)+(a[15]||0))/4;
-      if (maxScore < 3 && healthScore >= 3) res = 'A'; // 平和質判定
+      if (maxScore < 3 && healthScore >= 3) res = 'A'; 
       
       setTestResult(res); 
       window.scrollTo(0,0);
@@ -535,9 +522,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 UI: 購物車 & 結帳流程
-  // ==========================================
   const renderCartAndCheckout = () => {
     const cartDates = Object.keys(cart).sort();
     
@@ -636,9 +620,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 UI: 我的帳戶 (Profile) 
-  // ==========================================
   const renderProfile = () => {
     return (
       <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in">
@@ -679,9 +660,6 @@ export default function App() {
     );
   };
 
-  // ==========================================
-  // 📱 Bottom Navigation (嚴格 5 Tabs)
-  // ==========================================
   const cartItemCount = Object.keys(cart).length;
 
   return (
@@ -696,7 +674,6 @@ export default function App() {
           {activeTab === 'profile' && renderProfile()}
         </div>
 
-        {/* 底部導航 - 5個Tab */}
         <div className="absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-[#E5E5E5] px-1 pt-2 pb-safe flex justify-between items-end z-50">
           <button onClick={() => { setActiveTab('home'); setCheckoutStep('cart'); }} className={`flex flex-col items-center justify-end gap-1.5 flex-1 pb-2 transition-colors ${activeTab === 'home' ? 'text-[#D97706]' : 'text-[#9CA3AF]'}`}>
             <CalendarDays size={26} strokeWidth={activeTab === 'home' ? 2.5 : 1.5} />
@@ -708,7 +685,6 @@ export default function App() {
             <span className="text-[10px] font-medium">資訊</span>
           </button>
           
-          {/* 置中購物車按鈕 */}
           <button onClick={() => { setActiveTab('cart'); if(checkoutStep === 'success') setCheckoutStep('cart'); }} className="flex flex-col items-center justify-end gap-1 flex-1 relative pb-2">
             <div className={`relative w-[3.5rem] h-[3.5rem] rounded-full flex items-center justify-center -mt-7 shadow-sm border ${activeTab === 'cart' ? 'bg-[#D97706] border-[#D97706] text-white' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>
               <ShoppingBag size={24} strokeWidth={activeTab === 'cart' ? 2 : 1.5} />
