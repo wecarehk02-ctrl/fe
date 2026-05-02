@@ -75,8 +75,8 @@ export default function App() {
   
   const [menusData, setMenusData] = useState({});
   const [blogsData, setBlogsData] = useState({});
-  const [dishesData, setDishesData] = useState({}); // 🌟 新增：獲取菜品詳細資料庫
-  const [previewDish, setPreviewDish] = useState(null); // 🌟 新增：展示菜式詳細資料嘅狀態
+  const [dishesData, setDishesData] = useState({}); 
+  const [previewDish, setPreviewDish] = useState(null); 
 
   const [mealType, setMealType] = useState('daily'); 
   const [cart, setCart] = useState({});
@@ -116,7 +116,6 @@ export default function App() {
     return () => { unsubMenus(); unsubBlogs(); unsubDishes(); };
   }, []);
 
-  // 當選擇嘅日子改變時，更新表單
   useEffect(() => {
     if (mealType === 'daily' && !isBulkMode && selectedDates.length === 1 && selectedDates[0]) {
       const dateStr = selectedDates[0];
@@ -134,7 +133,6 @@ export default function App() {
     if (isBulkMode && mealType === 'daily') {
       setSelectedDates(prev => {
         const newDates = prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort();
-        // 🌟 強制更新表單為「最後一次點擊的日期」
         return newDates.length > 0 ? newDates : [dStr];
       });
     } else {
@@ -144,8 +142,6 @@ export default function App() {
 
   const handleAddToCart = () => {
     if (!selectedDates[0]) return;
-    
-    // 🌟 核心修改：每日必須訂 2 餐或以上，最多 3 餐
     const mealCount = Object.keys(dailyForm.meals).length;
     if (mealCount < 2) return showToast("每日必須訂購最少兩餐 (A/B/C餐)");
     if (mealCount > 3) return showToast("每日最多只可訂購三餐");
@@ -169,12 +165,36 @@ export default function App() {
     }
   };
 
+  // 🌟 自動計算未來 7/14/21 個有效日子並加入購物車
   const confirmSpecialMeal = () => {
     if (!specForm.texture) return showToast("請選擇質感");
     const dStr = selectedDates[0];
     if (!dStr) return;
-    setCart(prev => ({ ...prev, [dStr]: { isSpecial: true, specialName: selectingSpecial.meal.name, duration: selectingSpecial.duration, texture: specForm.texture, rice: specForm.rice, soupQty: 0, meals: {} } }));
-    showToast(`✅ 已將 ${selectingSpecial.meal.name} 加入購物車`);
+
+    const newCart = { ...cart };
+    let addedCount = 0;
+    let currentDate = new Date(dStr);
+
+    while (addedCount < selectingSpecial.duration) {
+      if (!isUnavailableDate(currentDate)) {
+        const curStr = getLocalDateFormat(currentDate);
+        newCart[curStr] = {
+          isSpecial: true,
+          specialName: selectingSpecial.meal.name,
+          duration: selectingSpecial.duration,
+          currentDay: addedCount + 1, // 記錄係第幾日
+          texture: specForm.texture,
+          rice: specForm.rice,
+          soupQty: 0,
+          meals: {}
+        };
+        addedCount++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1); // 加一日繼續判斷
+    }
+
+    setCart(newCart);
+    showToast(`✅ 已成功將 ${selectingSpecial.duration} 日療程加入購物車`);
     setSelectingSpecial(null); setSpecForm({ texture: '', rice: '正飯' }); setActiveTab('cart');
   };
   
@@ -250,7 +270,8 @@ export default function App() {
       const newOrders = [];
       for (const [dateStr, details] of Object.entries(cart)) {
         const counts = {};
-        if (details.isSpecial) counts[`特別餐_${details.specialName}(${details.duration}日)_${details.texture}_${details.rice}`] = 1;
+        // 🌟 寫入進度 (例如 1/21) 俾後台辨識
+        if (details.isSpecial) counts[`特別餐_${details.specialName}(${details.currentDay}/${details.duration})_${details.texture}_${details.rice}`] = 1;
         else Object.entries(details.meals).forEach(([mealCode, data]) => { counts[`${mealCode}_${data.texture}_${data.rice}`] = 1; });
 
         const orderData = { date: dateStr, customerId: customerInfo.id, counts: counts, soupQty: details.soupQty || 0, referralCode: referralCode.trim(), status: '處理中', timestamp: new Date().toISOString() };
@@ -280,7 +301,6 @@ export default function App() {
   const renderHome = () => {
     if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 30 天沒有可送餐日子</div>;
 
-    // 🌟 修正：批量模式下，用「最新點擊」嘅日期預覽 Menu
     const previewDateStr = selectedDates[selectedDates.length - 1] || selectedDates[0];
     const todayMenu = menusData[previewDateStr] || {}; 
 
@@ -303,7 +323,6 @@ export default function App() {
     return (
       <div className="pb-32 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-500 relative">
         
-        {/* 🌟 新增：精美菜式展示 Modal */}
         {previewDish && (
           <div className="fixed inset-0 bg-black/60 z-[110] flex items-end sm:items-center justify-center">
             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden animate-in slide-in-from-bottom-full sm:zoom-in-95">
@@ -332,7 +351,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 特別餐選擇 Modal */}
         {selectingSpecial && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center sm:items-center">
             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
@@ -401,8 +419,6 @@ export default function App() {
                         <div className="p-5 cursor-pointer flex items-start gap-4" onClick={() => toggleMeal(m)}>
                           <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shrink-0 ${isSelected ? 'bg-[#D97706] text-white' : 'bg-[#F3F0EA] text-[#7A6455]'}`}>{m}</div>
                           <div className="flex-1 pt-1">
-                            
-                            {/* 🌟 帶 Info 按鈕嘅標題列 */}
                             <div className={`font-medium text-lg leading-snug flex items-center gap-2 ${isSelected ? 'text-[#3F2B1D]' : 'text-[#3F2B1D]'}`}>
                               {menuName}
                               {menuName !== '未有資料，以當日為準' && (
@@ -414,7 +430,6 @@ export default function App() {
                                 }} className="text-[#D97706] p-1.5 bg-[#FFFBEB] rounded-full hover:bg-[#FEF3C7] transition-colors"><Info size={16}/></button>
                               )}
                             </div>
-                            
                             {isSelected && mealData.texture && <div className="text-sm text-[#7A6455] mt-1.5">組合: <span className="font-semibold text-[#D97706]">{mealData.texture} + {mealData.rice}</span></div>}
                             {isSelected && !mealData.texture && <div className="text-sm text-[#EF4444] mt-1.5 font-medium">請在下方選擇質感</div>}
                           </div>
@@ -464,11 +479,7 @@ export default function App() {
                 </div>
               </section>
 
-              <div className="pt-2 mb-8">
-                <button type="button" onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>
-                  {isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}
-                </button>
-              </div>
+              <div className="pt-2 mb-8"><button type="button" onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>{isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}</button></div>
             </>
           )}
 
@@ -519,7 +530,14 @@ export default function App() {
                       <div className="w-16 h-16 bg-[#F3F0EA] text-[#3F2B1D] rounded-xl flex flex-col justify-center items-center shrink-0"><span className="text-[10px] font-medium uppercase tracking-wider">{dateStr.substring(5, 7)}月</span><span className="text-2xl font-semibold leading-none mt-1">{dateStr.substring(8, 10)}</span></div>
                       <div className="flex-1 min-w-0 pt-0.5">
                         {item.isSpecial ? (
-                          <><div className="font-semibold text-lg text-[#D97706] mb-1">{item.specialName}</div><div className="text-sm text-[#7A6455]">送餐日數: {item.duration} 日<br/>組合: {item.texture} + {item.rice}<br/>(由 {formatDisplayDate(dateStr)} 起)</div></>
+                          <>
+                            <div className="font-semibold text-lg text-[#D97706] mb-1">{item.specialName}</div>
+                            <div className="text-sm text-[#7A6455]">
+                              進度: 第 <span className="font-bold text-[#D97706]">{item.currentDay}</span> / {item.duration} 日<br/>
+                              組合: {item.texture} + {item.rice}<br/>
+                              <span className="text-xs text-gray-400">送餐日: {formatDisplayDate(dateStr)}</span>
+                            </div>
+                          </>
                         ) : (
                           <>
                             {Object.entries(item.meals).map(([m, data]) => (<div key={m} className="font-medium text-lg text-[#3F2B1D] mb-1.5">{m}餐 <span className="text-sm font-normal text-[#7A6455] border border-[#E5E5E5] rounded-lg px-2 py-0.5 ml-2 bg-[#F9FAF8] align-middle">{data.texture ? `${data.texture} + ${data.rice}` : '未選齊'}</span></div>))}
@@ -658,8 +676,16 @@ export default function App() {
                   <div key={o.id} className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm">
                     <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]"><span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span><span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span></div>
                     <div className="text-base text-[#7A6455] space-y-2">
-                      {Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' + ')})</span></div>)}
-                      {o.soupQty > 0 ? <div>🍲 例湯</div> : null}
+                      {Object.keys(o.counts).map(k => {
+                        // 處理推薦碼紀錄顯示
+                        const parts = k.split('_');
+                        if (parts[0] === '特別餐') {
+                           return <div key={k}>✅ {parts[1]} <span className="text-[#9CA3AF] text-sm ml-1">({parts[2]} + {parts[3]})</span></div>;
+                        }
+                        return <div key={k}>✅ {parts[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({parts.slice(1).join(' + ')})</span></div>;
+                      })}
+                      {o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}
+                      {o.referralCode ? <div className="text-sm text-[#D97706] mt-2 border-t pt-2 border-[#F3F0EA]">推薦碼: {o.referralCode}</div> : null}
                     </div>
                   </div>
                 ))}
