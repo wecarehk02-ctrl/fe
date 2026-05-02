@@ -41,9 +41,7 @@ const generateUpcomingDates = () => {
   const dates = []; 
   let current = getMinDate();
   while (dates.length < 30) { 
-    if (!isUnavailableDate(current)) {
-      dates.push(new Date(current));
-    }
+    if (!isUnavailableDate(current)) { dates.push(new Date(current)); }
     current.setDate(current.getDate() + 1); 
   }
   return dates;
@@ -76,7 +74,9 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState('');
   
   const [menusData, setMenusData] = useState({});
-  const [blogsData, setBlogsData] = useState([]);
+  const [blogsData, setBlogsData] = useState({});
+  const [dishesData, setDishesData] = useState({}); // 🌟 新增：獲取菜品詳細資料庫
+  const [previewDish, setPreviewDish] = useState(null); // 🌟 新增：展示菜式詳細資料嘅狀態
 
   const [mealType, setMealType] = useState('daily'); 
   const [cart, setCart] = useState({});
@@ -109,9 +109,14 @@ export default function App() {
     const unsubBlogs = onSnapshot(collection(db, 'blogs'), (snap) => {
       setBlogsData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-    return () => { unsubMenus(); unsubBlogs(); };
+    const unsubDishes = onSnapshot(collection(db, 'dishes'), (snap) => {
+      const dObj = {}; snap.docs.forEach(d => { dObj[d.id] = d.data(); });
+      setDishesData(dObj);
+    });
+    return () => { unsubMenus(); unsubBlogs(); unsubDishes(); };
   }, []);
 
+  // 當選擇嘅日子改變時，更新表單
   useEffect(() => {
     if (mealType === 'daily' && !isBulkMode && selectedDates.length === 1 && selectedDates[0]) {
       const dateStr = selectedDates[0];
@@ -126,13 +131,24 @@ export default function App() {
 
   const handleDateSelect = (dateObj) => {
     const dStr = getLocalDateFormat(dateObj);
-    if (isBulkMode && mealType === 'daily') setSelectedDates(prev => prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort());
-    else setSelectedDates([dStr]);
+    if (isBulkMode && mealType === 'daily') {
+      setSelectedDates(prev => {
+        const newDates = prev.includes(dStr) ? prev.filter(d => d !== dStr) : [...prev, dStr].sort();
+        // 🌟 強制更新表單為「最後一次點擊的日期」
+        return newDates.length > 0 ? newDates : [dStr];
+      });
+    } else {
+      setSelectedDates([dStr]);
+    }
   };
 
   const handleAddToCart = () => {
     if (!selectedDates[0]) return;
-    if (Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0) return showToast("請最少選擇一款餐點或附加項目");
+    
+    // 🌟 核心修改：每日必須訂 2 餐或以上，最多 3 餐
+    const mealCount = Object.keys(dailyForm.meals).length;
+    if (mealCount < 2) return showToast("每日必須訂購最少兩餐 (A/B/C餐)");
+    if (mealCount > 3) return showToast("每日最多只可訂購三餐");
     
     for (const [meal, data] of Object.entries(dailyForm.meals)) { 
       if (!data.texture) return showToast(`請為 ${meal}餐 選擇質感`); 
@@ -264,8 +280,9 @@ export default function App() {
   const renderHome = () => {
     if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 30 天沒有可送餐日子</div>;
 
-    const dStr = selectedDates[0];
-    const todayMenu = menusData[dStr] || {}; 
+    // 🌟 修正：批量模式下，用「最新點擊」嘅日期預覽 Menu
+    const previewDateStr = selectedDates[selectedDates.length - 1] || selectedDates[0];
+    const todayMenu = menusData[previewDateStr] || {}; 
 
     const toggleMeal = (meal) => {
       if (dailyForm.meals[meal]) {
@@ -286,21 +303,48 @@ export default function App() {
     return (
       <div className="pb-32 bg-[#FDFBF7] min-h-screen font-sans animate-in fade-in duration-500 relative">
         
+        {/* 🌟 新增：精美菜式展示 Modal */}
+        {previewDish && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden animate-in slide-in-from-bottom-full sm:zoom-in-95">
+               <div className="relative h-64 bg-gray-100 flex items-center justify-center">
+                  {previewDish.imageUrl ? (
+                    <img src={previewDish.imageUrl} className="w-full h-full object-cover" alt={previewDish.name}/>
+                  ) : (
+                    <div className="flex flex-col items-center text-gray-400"><Soup size={48} className="mb-2 opacity-50"/><span>無產品圖片</span></div>
+                  )}
+                  <button onClick={()=>setPreviewDish(null)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full backdrop-blur-sm"><X size={20}/></button>
+               </div>
+               <div className="p-6">
+                  <h3 className="text-2xl font-bold text-[#3F2B1D] mb-2">{previewDish.name}</h3>
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {(previewDish.tags||[]).length > 0 ? (previewDish.tags.map(t => <span key={t} className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-1 rounded-md text-xs font-bold">{t}</span>)) : <span className="text-xs text-gray-400">新鮮食材製作</span>}
+                  </div>
+                  <h4 className="text-sm font-bold text-[#7A6455] mb-3">營養價值 (每份參考)</h4>
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                     <div className="bg-[#F9FAF8] p-3 rounded-2xl border border-[#E5E5E5]"><div className="text-lg font-black text-[#3F2B1D]">{previewDish.nutrition?.kcal||0}</div><div className="text-[10px] font-medium text-[#9CA3AF] mt-1">卡路里</div></div>
+                     <div className="bg-[#F9FAF8] p-3 rounded-2xl border border-[#E5E5E5]"><div className="text-lg font-black text-[#3F2B1D]">{previewDish.nutrition?.protein||0}g</div><div className="text-[10px] font-medium text-[#9CA3AF] mt-1">蛋白質</div></div>
+                     <div className="bg-[#F9FAF8] p-3 rounded-2xl border border-[#E5E5E5]"><div className="text-lg font-black text-[#3F2B1D]">{previewDish.nutrition?.carbs||0}g</div><div className="text-[10px] font-medium text-[#9CA3AF] mt-1">碳水</div></div>
+                     <div className="bg-[#F9FAF8] p-3 rounded-2xl border border-[#E5E5E5]"><div className="text-lg font-black text-[#3F2B1D]">{previewDish.nutrition?.fat||0}g</div><div className="text-[10px] font-medium text-[#9CA3AF] mt-1">脂肪</div></div>
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 特別餐選擇 Modal */}
         {selectingSpecial && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center sm:items-center">
             <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95">
                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-[#3F2B1D]">「{selectingSpecial.meal.name}」選項</h3><button onClick={() => setSelectingSpecial(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button></div>
-               
                <div className="text-sm text-[#7A6455] mb-2 font-medium">1. 選擇質感：</div>
                <div className="grid grid-cols-3 gap-2 mb-4">
                   {TEXTURES.map(t => (<button key={t} onClick={() => setSpecForm(p=>({...p, texture: t}))} className={`py-3 border-2 rounded-xl font-medium transition-all ${specForm.texture === t ? 'bg-[#3F2B1D] text-white border-[#3F2B1D]' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>{t}</button>))}
                </div>
-
                <div className="text-sm text-[#7A6455] mb-2 font-medium">2. 選擇飯類：</div>
                <div className="grid grid-cols-4 gap-2 mb-8">
                   {RICE_TEXTURES.map(r => (<button key={r} onClick={() => setSpecForm(p=>({...p, rice: r}))} className={`py-3 border-2 rounded-xl font-medium transition-all text-sm ${specForm.rice === r ? 'bg-[#D97706] text-white border-[#D97706]' : 'bg-white border-[#E5E5E5] text-[#3F2B1D]'}`}>{r}</button>))}
                </div>
-
                <button onClick={confirmSpecialMeal} className="w-full py-4 bg-[#D97706] text-white text-lg font-medium rounded-xl active:scale-95 shadow-md">確認加入購物車</button>
             </div>
           </div>
@@ -316,7 +360,6 @@ export default function App() {
           
           <div className="relative flex items-center -mx-2 px-2">
             <button onClick={scrollLeft} className="p-1.5 bg-white shadow-md rounded-full text-[#7A6455] z-10 absolute left-2 border border-[#E5E5E5] hover:bg-[#F3F0EA] hidden sm:block"><ArrowLeft size={16}/></button>
-            
             <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-4 pt-1 snap-x date-scrollbar w-full px-2">
               {upcomingDates.map((date) => {
                 const dateStr = getLocalDateFormat(date);
@@ -325,7 +368,6 @@ export default function App() {
                 return (
                   <button type="button" key={dateStr} onClick={() => handleDateSelect(date)} className={`snap-center flex-shrink-0 w-[4.5rem] py-3 rounded-2xl transition-all relative flex flex-col items-center justify-center cursor-pointer ${isSelected ? 'bg-[#3F2B1D] text-white shadow-md' : 'bg-white border border-[#E5E5E5] text-[#7A6455]'} ${hasCartItem && !isSelected ? 'border-[#D97706] bg-[#FFFBEB]' : ''}`}>
                     {hasCartItem && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D97706] rounded-full"></div>}
-                    {/* 🌟 補回月份顯示 */}
                     <span className={`text-[10px] font-bold mb-0.5 ${isSelected ? 'text-white/80' : 'text-[#D97706]'}`}>{date.getMonth() + 1}月</span>
                     <span className="text-xl font-black leading-none mb-1">{date.getDate()}</span>
                     <span className={`text-[10px] font-medium ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>{['日','一','二','三','四','五','六'][date.getDay()]}</span>
@@ -333,7 +375,6 @@ export default function App() {
                 );
               })}
             </div>
-
             <button onClick={scrollRight} className="p-1.5 bg-white shadow-md rounded-full text-[#7A6455] z-10 absolute right-2 border border-[#E5E5E5] hover:bg-[#F3F0EA] hidden sm:block"><ArrowRight size={16}/></button>
           </div>
         </div>
@@ -347,7 +388,7 @@ export default function App() {
           {mealType === 'daily' && (
             <>
               <section>
-                <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-medium text-[#3F2B1D]">1. 選擇主餐 <span className="text-sm text-[#9CA3AF] ml-2">可選多款</span></h3></div>
+                <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-medium text-[#3F2B1D]">1. 選擇主餐 <span className="text-sm text-[#9CA3AF] ml-2">最少選兩餐</span></h3></div>
                 <div className="space-y-4">
                   {MEALS.map(m => {
                     const mealData = dailyForm.meals[m];
@@ -360,7 +401,20 @@ export default function App() {
                         <div className="p-5 cursor-pointer flex items-start gap-4" onClick={() => toggleMeal(m)}>
                           <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shrink-0 ${isSelected ? 'bg-[#D97706] text-white' : 'bg-[#F3F0EA] text-[#7A6455]'}`}>{m}</div>
                           <div className="flex-1 pt-1">
-                            <div className={`font-medium text-lg leading-snug ${isSelected ? 'text-[#3F2B1D]' : 'text-[#3F2B1D]'}`}>{menuName}</div>
+                            
+                            {/* 🌟 帶 Info 按鈕嘅標題列 */}
+                            <div className={`font-medium text-lg leading-snug flex items-center gap-2 ${isSelected ? 'text-[#3F2B1D]' : 'text-[#3F2B1D]'}`}>
+                              {menuName}
+                              {menuName !== '未有資料，以當日為準' && (
+                                <button onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  const safeDocId = menuName.replace(/\//g, '或');
+                                  const dInfo = Object.values(dishesData).find(x => x.name === menuName || x.name === safeDocId);
+                                  if(dInfo) setPreviewDish(dInfo); else showToast("此菜式暫未有詳細資料");
+                                }} className="text-[#D97706] p-1.5 bg-[#FFFBEB] rounded-full hover:bg-[#FEF3C7] transition-colors"><Info size={16}/></button>
+                              )}
+                            </div>
+                            
                             {isSelected && mealData.texture && <div className="text-sm text-[#7A6455] mt-1.5">組合: <span className="font-semibold text-[#D97706]">{mealData.texture} + {mealData.rice}</span></div>}
                             {isSelected && !mealData.texture && <div className="text-sm text-[#EF4444] mt-1.5 font-medium">請在下方選擇質感</div>}
                           </div>
@@ -393,7 +447,6 @@ export default function App() {
 
               <section>
                 <h3 className="text-lg font-medium text-[#3F2B1D] mb-4">2. 附加項目 <span className="text-sm text-[#9CA3AF] ml-2">自由選擇</span></h3>
-                
                 <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm mb-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3 text-[#3F2B1D]">
@@ -411,7 +464,11 @@ export default function App() {
                 </div>
               </section>
 
-              <div className="pt-2 mb-8"><button type="button" onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>{isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}</button></div>
+              <div className="pt-2 mb-8">
+                <button type="button" onClick={handleAddToCart} className={`w-full py-4 rounded-2xl font-medium text-lg tracking-wide transition-all flex justify-center items-center gap-2 ${(Object.keys(dailyForm.meals).length === 0 && dailyForm.soupQty === 0) ? 'bg-[#E5E5E5] text-[#9CA3AF] cursor-not-allowed' : 'bg-[#D97706] text-white shadow-lg active:scale-95'}`}>
+                  {isBulkMode ? `套用至 ${selectedDates.length} 個日子` : (cart[selectedDates[0]] && !cart[selectedDates[0]].isSpecial ? '更新餐單' : '確認選餐')}
+                </button>
+              </div>
             </>
           )}
 
@@ -528,7 +585,6 @@ export default function App() {
 
   const renderBlog = () => { return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
   
-  // 🌟 單頁體質問卷
   const renderTest = () => {
     if (testResult) {
       const info = CONSTITUTIONS[testResult]; const Icon = info.icon;
