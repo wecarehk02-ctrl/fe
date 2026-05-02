@@ -36,10 +36,14 @@ const getLocalDateFormat = (date) => {
 
 const isUnavailableDate = (date) => { if (date.getDay() === 0) return true; return HK_HOLIDAYS.includes(getLocalDateFormat(date)); };
 const getMinDate = () => { const d = new Date(); d.setDate(d.getDate() + 4); return d; };
+
 const generateUpcomingDates = () => {
-  const dates = []; let current = getMinDate();
+  const dates = []; 
+  let current = getMinDate();
   while (dates.length < 30) { 
-    if (!isUnavailableDate(current)) dates.push(new Date(current)); 
+    if (!isUnavailableDate(current)) {
+      dates.push(new Date(current));
+    }
     current.setDate(current.getDate() + 1); 
   }
   return dates;
@@ -94,7 +98,6 @@ export default function App() {
   const [pwdForm, setPwdForm] = useState({ old: '', new: '', confirm: '' });
   const [showPwdChange, setShowPwdChange] = useState(false);
 
-  // 🌟 用嚟控制日曆橫向 Scroll 嘅 Reference
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -258,7 +261,6 @@ export default function App() {
     );
   };
 
-  // 🌟 點餐首頁 (已加入 Desktop 左右 Scroll 箭嘴)
   const renderHome = () => {
     if (upcomingDates.length === 0) return <div className="p-10 text-center text-gray-500">未來 30 天沒有可送餐日子</div>;
 
@@ -278,7 +280,6 @@ export default function App() {
     const setTextureForMeal = (meal, texture) => { setDailyForm(p => ({ ...p, meals: { ...p.meals, [meal]: { ...(p.meals[meal] || {}), texture } } })); };
     const setRiceForMeal = (meal, rice) => { setDailyForm(p => ({ ...p, meals: { ...p.meals, [meal]: { ...(p.meals[meal] || {}), rice } } })); };
 
-    // 🌟 控制左右 Scroll 嘅 Function
     const scrollLeft = () => { if(scrollRef.current) scrollRef.current.scrollBy({ left: -200, behavior: 'smooth' }); };
     const scrollRight = () => { if(scrollRef.current) scrollRef.current.scrollBy({ left: 200, behavior: 'smooth' }); };
 
@@ -313,7 +314,6 @@ export default function App() {
             )}
           </div>
           
-          {/* 🌟 帶左右箭嘴及自定 Scrollbar 嘅日曆列 */}
           <div className="relative flex items-center -mx-2 px-2">
             <button onClick={scrollLeft} className="p-1.5 bg-white shadow-md rounded-full text-[#7A6455] z-10 absolute left-2 border border-[#E5E5E5] hover:bg-[#F3F0EA] hidden sm:block"><ArrowLeft size={16}/></button>
             
@@ -325,7 +325,10 @@ export default function App() {
                 return (
                   <button type="button" key={dateStr} onClick={() => handleDateSelect(date)} className={`snap-center flex-shrink-0 w-[4.5rem] py-3 rounded-2xl transition-all relative flex flex-col items-center justify-center cursor-pointer ${isSelected ? 'bg-[#3F2B1D] text-white shadow-md' : 'bg-white border border-[#E5E5E5] text-[#7A6455]'} ${hasCartItem && !isSelected ? 'border-[#D97706] bg-[#FFFBEB]' : ''}`}>
                     {hasCartItem && <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D97706] rounded-full"></div>}
-                    <span className="text-[11px] font-medium mb-1">{['日','一','二','三','四','五','六'][date.getDay()]}</span><span className="text-xl font-semibold">{date.getDate()}</span>
+                    {/* 🌟 補回月份顯示 */}
+                    <span className={`text-[10px] font-bold mb-0.5 ${isSelected ? 'text-white/80' : 'text-[#D97706]'}`}>{date.getMonth() + 1}月</span>
+                    <span className="text-xl font-black leading-none mb-1">{date.getDate()}</span>
+                    <span className={`text-[10px] font-medium ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>{['日','一','二','三','四','五','六'][date.getDay()]}</span>
                   </button>
                 );
               })}
@@ -390,6 +393,7 @@ export default function App() {
 
               <section>
                 <h3 className="text-lg font-medium text-[#3F2B1D] mb-4">2. 附加項目 <span className="text-sm text-[#9CA3AF] ml-2">自由選擇</span></h3>
+                
                 <div className="bg-white p-5 rounded-2xl border border-[#E5E5E5] shadow-sm mb-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3 text-[#3F2B1D]">
@@ -524,6 +528,7 @@ export default function App() {
 
   const renderBlog = () => { return <div className="pb-24 bg-[#FDFBF7] min-h-screen font-sans"><div className="bg-white px-5 py-6 border-b border-[#E5E5E5] sticky top-0 z-10"><h2 className="text-2xl font-semibold text-[#3F2B1D]">健康資訊</h2></div><div className="p-5">{blogsData.length === 0 ? <p className="text-gray-400 text-center mt-10">尚無文章</p> : blogsData.map(post => (<div key={post.id} className="bg-white rounded-2xl border border-[#E5E5E5] mb-5 p-6"><h3 className="text-xl font-medium">{post.title}</h3><p className="mt-2 text-[#7A6455]">{post.summary}</p></div>))}</div></div>; };
   
+  // 🌟 單頁體質問卷
   const renderTest = () => {
     if (testResult) {
       const info = CONSTITUTIONS[testResult]; const Icon = info.icon;
@@ -598,7 +603,7 @@ export default function App() {
                     <div className="flex justify-between items-center mb-4 pb-3 border-b border-[#F3F0EA]"><span className="text-lg font-medium text-[#3F2B1D]">{formatDisplayDate(o.date)} 送餐</span><span className="text-xs font-medium px-2.5 py-1 bg-[#ECFDF5] text-[#059669] rounded-md">{o.status}</span></div>
                     <div className="text-base text-[#7A6455] space-y-2">
                       {Object.keys(o.counts).map(k => <div key={k}>✅ {k.split('_')[0]}餐 <span className="text-[#9CA3AF] text-sm ml-1">({k.split('_').slice(1).join(' + ')})</span></div>)}
-                      {o.soupQty > 0 ? <div>🍲 例湯 x{o.soupQty}</div> : null}
+                      {o.soupQty > 0 ? <div>🍲 例湯</div> : null}
                     </div>
                   </div>
                 ))}
